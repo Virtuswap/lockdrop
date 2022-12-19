@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.0;
 
+import '@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import './interfaces/IvIntermediatePool.sol';
@@ -20,6 +21,7 @@ contract vIntermediatePool is IvIntermediatePool {
     }
 
     uint8 public constant AVAILABLE_LOCKING_WEEKS_MASK = 0xe;
+    uint8 public constant PRICE_RATIO_SHIFT_SIZE = 32;
     address public constant VIRTUSWAP_POOL = address(0x0);
 
     Phase public currentPhase;
@@ -28,12 +30,24 @@ contract vIntermediatePool is IvIntermediatePool {
     mapping(address => uint256) public depositIndexes;
     mapping(uint256 => mapping(uint8 => AmountPair)) public deposits;
 
+    uint256 lastPriceFeedTimestamp;
+    uint256 priceRatioShifted;
+
     address public immutable token0;
     address public immutable token1;
+    AggregatorV3Interface public immutable priceFeed0;
+    AggregatorV3Interface public immutable priceFeed1;
 
-    constructor(address _token0, address _token1) {
+    constructor(
+        address _token0,
+        address _token1,
+        address _priceFeed0,
+        address _priceFeed1
+    ) {
         token0 = _token0;
         token1 = _token1;
+        priceFeed0 = AggregatorV3Interface(_priceFeed0);
+        priceFeed1 = AggregatorV3Interface(_priceFeed1);
         currentPhase = Phase.CLOSED;
     }
 
@@ -50,19 +64,48 @@ contract vIntermediatePool is IvIntermediatePool {
             _locking_weeks & AVAILABLE_LOCKING_WEEKS_MASK != 0,
             'Invalid locking period'
         );
-        // TODO: check amount ratio with oracle
+        require(_amount0 > 0 && _amount1 > 0, 'Insufficient amounts');
+
+        if (
+            block.timestamp - lastPriceFeedTimestamp >= 1 days ||
+            lastPriceFeedTimestamp == 0
+        ) {
+            lastPriceFeedTimestamp = block.timestamp;
+            priceRatioShifted = _getCurrentPriceRatioShifted();
+        }
+
+        (
+            uint256 optimalAmount0,
+            uint256 optimalAmount1
+        ) = _calculateOptimalAmounts(_amount0, _amount1);
+
         uint256 index = depositIndexes[msg.sender];
         if (index != 0) {
             AmountPair memory prevDeposit = deposits[index][_locking_weeks];
             deposits[index][_locking_weeks] = AmountPair(
-                prevDeposit.amount0 + _amount0,
-                prevDeposit.amount1 + _amount1
+                prevDeposit.amount0 + optimalAmount0,
+                prevDeposit.amount1 + optimalAmount1
             );
         } else {
             index = ++totalDeposits;
             depositIndexes[msg.sender] = index;
-            deposits[index][_locking_weeks] = AmountPair(_amount0, _amount1);
+            deposits[index][_locking_weeks] = AmountPair(
+                optimalAmount0,
+                optimalAmount1
+            );
         }
+        SafeERC20.safeTransferFrom(
+            IERC20(token0),
+            msg.sender,
+            address(this),
+            optimalAmount0
+        );
+        SafeERC20.safeTransferFrom(
+            IERC20(token1),
+            msg.sender,
+            address(this),
+            optimalAmount1
+        );
     }
 
     // TODO: add phase transition
@@ -101,6 +144,36 @@ contract vIntermediatePool is IvIntermediatePool {
                     amounts.amount1
                 );
             }
+        }
+    }
+
+    function getLatestPrice(
+        AggregatorV3Interface priceFeed
+    ) public view returns (int price) {
+        (, price, , , ) = priceFeed.latestRoundData();
+        return price;
+    }
+
+    function _getCurrentPriceRatioShifted() private view returns (uint256) {
+        return
+            (uint256(getLatestPrice(priceFeed1)) << PRICE_RATIO_SHIFT_SIZE) /
+            uint256(getLatestPrice(priceFeed0));
+    }
+
+    function _calculateOptimalAmounts(
+        uint256 _amount0,
+        uint256 _amount1
+    ) private view returns (uint256 optimalAmount0, uint256 optimalAmount1) {
+        optimalAmount1 =
+            (_amount0 * priceRatioShifted) >>
+            PRICE_RATIO_SHIFT_SIZE;
+        if (optimalAmount1 <= _amount1) {
+            optimalAmount0 = _amount0;
+        } else {
+            optimalAmount0 =
+                (_amount1 << PRICE_RATIO_SHIFT_SIZE) /
+                priceRatioShifted;
+            optimalAmount1 = _amount1;
         }
     }
 }
