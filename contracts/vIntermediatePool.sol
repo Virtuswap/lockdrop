@@ -7,6 +7,8 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import './interfaces/IvIntermediatePool.sol';
 
+import 'hardhat/console.sol';
+
 contract vIntermediatePool is IvIntermediatePool {
     struct AmountPair {
         uint256 amount0;
@@ -30,8 +32,8 @@ contract vIntermediatePool is IvIntermediatePool {
     mapping(address => uint256) public depositIndexes;
     mapping(uint256 => mapping(uint8 => AmountPair)) public deposits;
 
-    uint256 lastPriceFeedTimestamp;
-    uint256 priceRatioShifted;
+    uint256 public lastPriceFeedTimestamp;
+    uint256 public priceRatioShifted;
 
     address public immutable token0;
     address public immutable token1;
@@ -49,6 +51,11 @@ contract vIntermediatePool is IvIntermediatePool {
         priceFeed0 = AggregatorV3Interface(_priceFeed0);
         priceFeed1 = AggregatorV3Interface(_priceFeed1);
         currentPhase = Phase.CLOSED;
+    }
+
+    // only for debugging purpose
+    function setPhase(Phase _phase) public {
+        currentPhase = _phase;
     }
 
     function deposit(
