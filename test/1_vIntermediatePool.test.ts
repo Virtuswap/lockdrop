@@ -2,12 +2,14 @@ import { assert, expect } from 'chai';
 import { network, deployments, ethers } from 'hardhat';
 import {
     vIntermediatePool,
+    vIntermediatePoolFactory,
     MockV3Aggregator0,
     mockV3Aggregator1,
 } from '../../typechain-types';
 import { time } from '@nomicfoundation/hardhat-network-helpers';
 
 describe('vIntermediatePool', function () {
+    let intermediatePoolFactory: vIntermediatePoolFactory;
     let intermediatePool: vIntermediatePool;
     let mockV3Aggregator0: MockV3Aggregator0;
     let mockV3Aggregator1: MockV3Aggregator1;
@@ -19,12 +21,29 @@ describe('vIntermediatePool', function () {
         const accounts = await ethers.getSigners();
         deployer = accounts[0];
         await deployments.fixture(['all']);
-        intermediatePool = await ethers.getContract('intermediatePool');
+        intermediatePoolFactory = await ethers.getContract(
+            'intermediatePoolFactory'
+        );
         mockV3Aggregator0 = await ethers.getContract('MockV3Aggregator0');
         mockV3Aggregator1 = await ethers.getContract('MockV3Aggregator1');
         token0 = await ethers.getContract('Token0');
         token1 = await ethers.getContract('Token1');
-        await time.setNextBlockTimestamp(await time.latest() + 7 * 24 * 60 * 60);
+        await intermediatePoolFactory.createPool(
+            token0.address,
+            token1.address,
+            mockV3Aggregator0.address,
+            mockV3Aggregator1.address,
+            await time.latest()
+        );
+        const intermediatePoolAddress = await intermediatePoolFactory.getPool(
+            token0.address,
+            token1.address
+        );
+        const factory = await ethers.getContractFactory('vIntermediatePool');
+        intermediatePool = await factory.attach(intermediatePoolAddress);
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
         await intermediatePool.triggerDepositPhase();
         await token0.approve(
             intermediatePool.address,

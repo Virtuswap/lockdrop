@@ -39,6 +39,6 @@ const deployMocks: DeployFunction = async function (
             args: [deployer, INITIAL_TOKEN_AMOUNT],
         });
     }
-}
+};
 export default deployMocks;
 deployMocks.tags = ['all', 'mocks'];

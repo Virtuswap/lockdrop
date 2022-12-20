@@ -38,16 +38,19 @@ contract vIntermediatePool is IvIntermediatePool {
     uint256 public immutable startTimestamp;
     address public immutable token0;
     address public immutable token1;
+    address public immutable factory;
     AggregatorV3Interface public immutable priceFeed0;
     AggregatorV3Interface public immutable priceFeed1;
 
     constructor(
+        address _factory,
         address _token0,
         address _token1,
         address _priceFeed0,
         address _priceFeed1,
         uint256 _startTimestamp
     ) {
+        factory = _factory;
         token0 = _token0;
         token1 = _token1;
         priceFeed0 = AggregatorV3Interface(_priceFeed0);
@@ -57,8 +60,14 @@ contract vIntermediatePool is IvIntermediatePool {
     }
 
     function triggerDepositPhase() external override {
-        require(block.timestamp >= startTimestamp + DEPOSIT_PHASE_DURATION, 'Too early');
-        require(currentPhase == Phase.CLOSED, 'Couldn\'t trigger from the current phase');
+        require(
+            block.timestamp >= startTimestamp + DEPOSIT_PHASE_DURATION,
+            'Too early'
+        );
+        require(
+            currentPhase == Phase.CLOSED,
+            "Couldn't trigger from the current phase"
+        );
         currentPhase = Phase.DEPOSIT;
     }
 
