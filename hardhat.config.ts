@@ -9,7 +9,7 @@ const config: HardhatUserConfig = {
             chainId: 31337,
         },
     },
-    solidity: "0.8.17",
+    solidity: "0.8.2",
     namedAccounts: {
         deployer: {
             default: 0,

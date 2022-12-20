@@ -13,7 +13,7 @@ interface IvIntermediatePool {
         uint8 _locking_period
     ) external;
 
-    function transferToRealPool() external;
+    function transferToRealPool(uint256 _transfersNumber) external;
 
     function withdraw() external;
 }

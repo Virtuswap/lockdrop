@@ -5,7 +5,9 @@ pragma solidity ^0.8.0;
 import '@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
+import '@openzeppelin/contracts/utils/math/Math.sol';
 import './interfaces/IvIntermediatePool.sol';
+import './interfaces/virtuswap/IvRouter.sol';
 
 contract vIntermediatePool is IvIntermediatePool {
     struct AmountPair {
@@ -24,12 +26,14 @@ contract vIntermediatePool is IvIntermediatePool {
     uint8 public constant PRICE_RATIO_SHIFT_SIZE = 32;
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
     uint256 public constant PRICE_UPDATE_FREQ = 1 days;
-    address public constant VIRTUSWAP_POOL = address(0x0);
+    address public constant VIRTUSWAP_ROUTER = address(0x0);
 
     Phase public currentPhase;
 
     uint256 public totalDeposits;
+    uint256 public depositsProcessed;
     mapping(address => uint256) public depositIndexes;
+    mapping(uint256 => address) public indexToAddress;
     mapping(uint256 => mapping(uint8 => AmountPair)) public deposits;
 
     uint256 public lastPriceFeedTimestamp;
@@ -120,6 +124,7 @@ contract vIntermediatePool is IvIntermediatePool {
         } else {
             index = ++totalDeposits;
             depositIndexes[msg.sender] = index;
+            indexToAddress[index] = msg.sender;
             deposits[index][_locking_weeks] = AmountPair(
                 optimalAmount0,
                 optimalAmount1
@@ -141,14 +146,51 @@ contract vIntermediatePool is IvIntermediatePool {
 
     // TODO: add migration logic
 
-    function transferToRealPool() external override {
+    function transferToRealPool(uint256 _transfersNumber) external override {
         require(
             currentPhase == Phase.TRANSFER,
             'Unable to transfer during current phase'
         );
-        // TODO: transfer to real pool
-        // TODO: mint LP tokens
+
+        uint256 upperBound = Math.min(
+            depositsProcessed + _transfersNumber,
+            totalDeposits
+        );
+        address _token0 = token0;
+        address _token1 = token1;
+        uint256 optimalAmount0;
+        uint256 optimalAmount1;
+        AmountPair memory amounts;
+        for (uint256 i = depositsProcessed; i < upperBound; ++i) {
+            for (uint256 j = 1; j < 256; j <<= 1) {
+                if (AVAILABLE_LOCKING_WEEKS_MASK & j != 0) {
+                    amounts = deposits[i][uint8(j)];
+                    (optimalAmount0, optimalAmount1) = _calculateOptimalAmounts(
+                        amounts.amount0,
+                        amounts.amount1
+                    );
+                    IvRouter(VIRTUSWAP_ROUTER).addLiquidity(
+                        _token0,
+                        _token1,
+                        optimalAmount0,
+                        optimalAmount1,
+                        optimalAmount0,
+                        optimalAmount1,
+                        indexToAddress[i],
+                        block.timestamp + 1 minutes
+                    );
+                    deposits[i][uint8(j)] = AmountPair(
+                        amounts.amount0 - optimalAmount0,
+                        amounts.amount1 - optimalAmount1
+                    );
+                }
+            }
+        }
         // TODO: mint VRSW tokens
+        depositsProcessed = upperBound;
+        if (upperBound == totalDeposits) {
+            currentPhase = Phase.WITHDRAW;
+        }
     }
 
     function withdraw() external override {
