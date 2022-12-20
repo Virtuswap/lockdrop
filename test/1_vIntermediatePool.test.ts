@@ -24,7 +24,8 @@ describe('vIntermediatePool', function () {
         mockV3Aggregator1 = await ethers.getContract('MockV3Aggregator1');
         token0 = await ethers.getContract('Token0');
         token1 = await ethers.getContract('Token1');
-        await intermediatePool.setPhase(1);
+        await time.setNextBlockTimestamp(await time.latest() + 7 * 24 * 60 * 60);
+        await intermediatePool.triggerDepositPhase();
         await token0.approve(
             intermediatePool.address,
             ethers.utils.parseEther('1000')

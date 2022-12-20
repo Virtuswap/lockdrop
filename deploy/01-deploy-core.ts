@@ -4,7 +4,7 @@ import { DeployFunction } from 'hardhat-deploy/types';
 const deployCore: DeployFunction = async function(
     hre: HardhatRuntimeEnvironment
 ) {
-    const { network } = hre;
+    const { network, ethers } = hre;
     const { deployer } = await getNamedAccounts();
     const { deploy, log } = deployments;
     let token0UsdAggregatorAddress: string;
@@ -22,10 +22,14 @@ const deployCore: DeployFunction = async function(
         token1UsdAggregatorAddress = token1Aggregator.address;
     }
 
+    const blockNumBefore = await ethers.provider.getBlockNumber();
+    const blockBefore = await ethers.provider.getBlock(blockNumBefore);
+    const timestampBefore = blockBefore.timestamp;
+
     const intermediatePool = await deploy('intermediatePool', {
         from: deployer,
         contract: 'vIntermediatePool',
-        args: [token0Address, token1Address, token0UsdAggregatorAddress, token1UsdAggregatorAddress],
+        args: [token0Address, token1Address, token0UsdAggregatorAddress, token1UsdAggregatorAddress, timestampBefore],
         log: true,
     });
 };

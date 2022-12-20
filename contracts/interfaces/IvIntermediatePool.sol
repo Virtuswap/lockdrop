@@ -3,6 +3,8 @@
 pragma solidity ^0.8.0;
 
 interface IvIntermediatePool {
+    function triggerDepositPhase() external;
+
     function deposit(
         uint256 _amount0,
         uint256 _amount1,

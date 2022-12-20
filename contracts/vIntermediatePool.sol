@@ -7,8 +7,6 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import './interfaces/IvIntermediatePool.sol';
 
-import 'hardhat/console.sol';
-
 contract vIntermediatePool is IvIntermediatePool {
     struct AmountPair {
         uint256 amount0;
@@ -24,6 +22,8 @@ contract vIntermediatePool is IvIntermediatePool {
 
     uint8 public constant AVAILABLE_LOCKING_WEEKS_MASK = 0xe;
     uint8 public constant PRICE_RATIO_SHIFT_SIZE = 32;
+    uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
+    uint256 public constant PRICE_UPDATE_FREQ = 1 days;
     address public constant VIRTUSWAP_POOL = address(0x0);
 
     Phase public currentPhase;
@@ -35,6 +35,7 @@ contract vIntermediatePool is IvIntermediatePool {
     uint256 public lastPriceFeedTimestamp;
     uint256 public priceRatioShifted;
 
+    uint256 public immutable startTimestamp;
     address public immutable token0;
     address public immutable token1;
     AggregatorV3Interface public immutable priceFeed0;
@@ -44,18 +45,21 @@ contract vIntermediatePool is IvIntermediatePool {
         address _token0,
         address _token1,
         address _priceFeed0,
-        address _priceFeed1
+        address _priceFeed1,
+        uint256 _startTimestamp
     ) {
         token0 = _token0;
         token1 = _token1;
         priceFeed0 = AggregatorV3Interface(_priceFeed0);
         priceFeed1 = AggregatorV3Interface(_priceFeed1);
+        startTimestamp = _startTimestamp;
         currentPhase = Phase.CLOSED;
     }
 
-    // only for debugging purpose
-    function setPhase(Phase _phase) public {
-        currentPhase = _phase;
+    function triggerDepositPhase() external override {
+        require(block.timestamp >= startTimestamp + DEPOSIT_PHASE_DURATION, 'Too early');
+        require(currentPhase == Phase.CLOSED, 'Couldn\'t trigger from the current phase');
+        currentPhase = Phase.DEPOSIT;
     }
 
     function deposit(
@@ -74,7 +78,7 @@ contract vIntermediatePool is IvIntermediatePool {
         require(_amount0 > 0 && _amount1 > 0, 'Insufficient amounts');
 
         if (
-            block.timestamp - lastPriceFeedTimestamp >= 1 days ||
+            block.timestamp - lastPriceFeedTimestamp >= PRICE_UPDATE_FREQ ||
             lastPriceFeedTimestamp == 0
         ) {
             lastPriceFeedTimestamp = block.timestamp;
