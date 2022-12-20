@@ -60,15 +60,26 @@ contract vIntermediatePool is IvIntermediatePool {
     }
 
     function triggerDepositPhase() external override {
-        require(
-            block.timestamp >= startTimestamp + DEPOSIT_PHASE_DURATION,
-            'Too early'
-        );
+        require(block.timestamp >= startTimestamp, 'Too early');
         require(
             currentPhase == Phase.CLOSED,
             "Couldn't trigger from the current phase"
         );
         currentPhase = Phase.DEPOSIT;
+    }
+
+    function triggerTransferPhase() external override {
+        require(
+            block.timestamp >= startTimestamp + DEPOSIT_PHASE_DURATION,
+            'Too early'
+        );
+        require(
+            currentPhase == Phase.DEPOSIT,
+            "Couldn't trigger from the current phase"
+        );
+        currentPhase = Phase.TRANSFER;
+        lastPriceFeedTimestamp = block.timestamp;
+        priceRatioShifted = _getCurrentPriceRatioShifted();
     }
 
     function deposit(
@@ -128,7 +139,6 @@ contract vIntermediatePool is IvIntermediatePool {
         );
     }
 
-    // TODO: add phase transition
     // TODO: add migration logic
 
     function transferToRealPool() external override {

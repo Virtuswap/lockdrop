@@ -41,9 +41,6 @@ describe('vIntermediatePool', function () {
         );
         const factory = await ethers.getContractFactory('vIntermediatePool');
         intermediatePool = await factory.attach(intermediatePoolAddress);
-        await time.setNextBlockTimestamp(
-            (await time.latest()) + 7 * 24 * 60 * 60
-        );
         await intermediatePool.triggerDepositPhase();
         await token0.approve(
             intermediatePool.address,
