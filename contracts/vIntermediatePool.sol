@@ -114,6 +114,11 @@ contract vIntermediatePool is IvIntermediatePool {
             uint256 optimalAmount1
         ) = _calculateOptimalAmounts(_amount0, _amount1);
 
+        require(
+            optimalAmount0 > 0 && optimalAmount1 > 0,
+            'Insufficient amounts'
+        );
+
         uint256 index = depositIndexes[msg.sender];
         if (index != 0) {
             AmountPair memory prevDeposit = deposits[index][_locking_weeks];
@@ -205,16 +210,20 @@ contract vIntermediatePool is IvIntermediatePool {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
                 amounts = deposits[index][uint8(i)];
                 deposits[index][uint8(i)] = AmountPair(0, 0);
-                SafeERC20.safeTransfer(
-                    IERC20(token0),
-                    _to,
-                    amounts.amount0
-                );
-                SafeERC20.safeTransfer(
-                    IERC20(token1),
-                    _to,
-                    amounts.amount1
-                );
+                if (amounts.amount0 > 0) {
+                    SafeERC20.safeTransfer(
+                        IERC20(token0),
+                        _to,
+                        amounts.amount0
+                    );
+                }
+                if (amounts.amount1 > 0) {
+                    SafeERC20.safeTransfer(
+                        IERC20(token1),
+                        _to,
+                        amounts.amount1
+                    );
+                }
             }
         }
     }
