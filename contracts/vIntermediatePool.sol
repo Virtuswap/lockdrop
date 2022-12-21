@@ -193,12 +193,12 @@ contract vIntermediatePool is IvIntermediatePool {
         }
     }
 
-    function withdraw() external override {
+    function withdraw(address _to) external override {
         require(
             currentPhase == Phase.WITHDRAW,
             'Unable to withdraw during current phase'
         );
-        uint256 index = depositIndexes[msg.sender];
+        uint256 index = depositIndexes[_to];
         require(index != 0, 'Nothing to withdraw');
         AmountPair memory amounts;
         for (uint256 i = 1; i < 256; i <<= 1) {
@@ -207,12 +207,12 @@ contract vIntermediatePool is IvIntermediatePool {
                 deposits[index][uint8(i)] = AmountPair(0, 0);
                 SafeERC20.safeTransfer(
                     IERC20(token0),
-                    msg.sender,
+                    _to,
                     amounts.amount0
                 );
                 SafeERC20.safeTransfer(
                     IERC20(token1),
-                    msg.sender,
+                    _to,
                     amounts.amount1
                 );
             }

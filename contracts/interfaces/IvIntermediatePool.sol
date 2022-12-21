@@ -15,5 +15,5 @@ interface IvIntermediatePool {
 
     function transferToRealPool(uint256 _transfersNumber) external;
 
-    function withdraw() external;
+    function withdraw(address _to) external;
 }
