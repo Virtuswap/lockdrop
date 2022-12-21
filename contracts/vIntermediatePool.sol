@@ -27,14 +27,18 @@ contract vIntermediatePool is IvIntermediatePool {
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
     uint256 public constant PRICE_UPDATE_FREQ = 1 days;
     address public constant VIRTUSWAP_ROUTER = address(0x0);
+    address public constant VIRTUSWAP_PAIR = address(0x0);
 
     Phase public currentPhase;
 
     uint256 public totalDeposits;
     uint256 public depositsProcessed;
+    uint256 public totalLpTokens;
+    uint256 public totalTransferred0;
     mapping(address => uint256) public depositIndexes;
     mapping(uint256 => address) public indexToAddress;
     mapping(uint256 => mapping(uint8 => AmountPair)) public deposits;
+    mapping(uint256 => mapping(uint8 => uint256)) public tokensTransferred0;
 
     uint256 public lastPriceFeedTimestamp;
     uint256 public priceRatioShifted;
@@ -161,11 +165,10 @@ contract vIntermediatePool is IvIntermediatePool {
             depositsProcessed + _transfersNumber,
             totalDeposits
         );
-        address _token0 = token0;
-        address _token1 = token1;
         uint256 optimalAmount0;
         uint256 optimalAmount1;
         AmountPair memory amounts;
+        AmountPair memory optimalTotal;
         for (uint256 i = depositsProcessed; i < upperBound; ++i) {
             for (uint256 j = 1; j < 256; j <<= 1) {
                 if (AVAILABLE_LOCKING_WEEKS_MASK & j != 0) {
@@ -174,16 +177,12 @@ contract vIntermediatePool is IvIntermediatePool {
                         amounts.amount0,
                         amounts.amount1
                     );
-                    IvRouter(VIRTUSWAP_ROUTER).addLiquidity(
-                        _token0,
-                        _token1,
-                        optimalAmount0,
-                        optimalAmount1,
-                        optimalAmount0,
-                        optimalAmount1,
-                        indexToAddress[i],
-                        block.timestamp + 1 minutes
-                    );
+                    optimalTotal.amount0 += optimalAmount0;
+                    optimalTotal.amount1 += optimalAmount1;
+
+                    tokensTransferred0[i][uint8(j)] = optimalAmount0;
+
+                    // leftovers
                     deposits[i][uint8(j)] = AmountPair(
                         amounts.amount0 - optimalAmount0,
                         amounts.amount1 - optimalAmount1
@@ -191,14 +190,27 @@ contract vIntermediatePool is IvIntermediatePool {
                 }
             }
         }
+
+        IvRouter(VIRTUSWAP_ROUTER).addLiquidity(
+            token0,
+            token1,
+            optimalTotal.amount0,
+            optimalTotal.amount1,
+            optimalTotal.amount0,
+            optimalTotal.amount1,
+            address(this),
+            block.timestamp + 1 minutes
+        );
         // TODO: mint VRSW tokens
+        totalTransferred0 += optimalTotal.amount0;
         depositsProcessed = upperBound;
         if (upperBound == totalDeposits) {
+            totalLpTokens = IERC20(VIRTUSWAP_PAIR).balanceOf(address(this));
             currentPhase = Phase.WITHDRAW;
         }
     }
 
-    function withdraw(address _to) external override {
+    function withdrawLeftovers(address _to) external override {
         require(
             currentPhase == Phase.WITHDRAW,
             'Unable to withdraw during current phase'
@@ -222,6 +234,34 @@ contract vIntermediatePool is IvIntermediatePool {
                         IERC20(token1),
                         _to,
                         amounts.amount1
+                    );
+                }
+            }
+        }
+    }
+
+    function claimLpTokens(address _to) external override {
+        require(
+            currentPhase == Phase.WITHDRAW,
+            'Unable to withdraw during current phase'
+        );
+        uint256 index = depositIndexes[_to];
+        require(index != 0, 'Nothing to claim');
+        uint256 _startTimestamp = startTimestamp;
+        uint256 _totalLpTokens = totalLpTokens;
+        uint256 lpTokensAmount;
+        for (uint256 i = 1; i < 256; i <<= 1) {
+            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                if (block.timestamp < _startTimestamp + i * 1 weeks) break;
+                lpTokensAmount =
+                    (tokensTransferred0[index][uint8(i)] * _totalLpTokens) /
+                    totalTransferred0;
+                tokensTransferred0[index][uint8(i)] = 0;
+                if (lpTokensAmount > 0) {
+                    SafeERC20.safeTransfer(
+                        IERC20(VIRTUSWAP_PAIR),
+                        _to,
+                        lpTokensAmount
                     );
                 }
             }
