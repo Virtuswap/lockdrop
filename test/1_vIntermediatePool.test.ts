@@ -8,7 +8,7 @@ import {
 } from '../../typechain-types';
 import { time } from '@nomicfoundation/hardhat-network-helpers';
 
-describe('vIntermediatePool', function () {
+describe('vIntermediatePool: Phase 1', function () {
     let intermediatePoolFactory: vIntermediatePoolFactory;
     let intermediatePool: vIntermediatePool;
     let mockV3Aggregator0: MockV3Aggregator0;
@@ -170,4 +170,8 @@ describe('vIntermediatePool', function () {
             intermediatePool.deposit(amount0, amount1, 4)
         ).to.revertedWith('Insufficient amounts');
     });
+});
+
+describe('vIntermediatePool: Phase 2', function () {
+    beforeEach(async () => {});
 });

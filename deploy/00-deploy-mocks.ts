@@ -26,7 +26,7 @@ const deployMocks: DeployFunction = async function (
             log: true,
             args: [DECIMALS, INITIAL_PRICE_1],
         });
-        await deploy('Token0', {
+        const token0 = await deploy('Token0', {
             contract: 'Token0',
             from: deployer,
             log: true,
@@ -37,6 +37,17 @@ const deployMocks: DeployFunction = async function (
             from: deployer,
             log: true,
             args: [deployer, INITIAL_TOKEN_AMOUNT],
+        });
+        const vPairFactory = await deploy('MockVPairFactory', {
+            contract: 'MockVPairFactory',
+            from: deployer,
+            log: true,
+        });
+        await deploy('MockVRouter', {
+            contract: 'MockVRouter',
+            from: deployer,
+            log: true,
+            args: [vPairFactory.address, token0.address],
         });
     }
 };

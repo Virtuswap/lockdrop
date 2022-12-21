@@ -26,8 +26,6 @@ contract vIntermediatePool is IvIntermediatePool {
     uint8 public constant PRICE_RATIO_SHIFT_SIZE = 32;
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
     uint256 public constant PRICE_UPDATE_FREQ = 1 days;
-    address public constant VIRTUSWAP_ROUTER = address(0x0);
-    address public constant VIRTUSWAP_PAIR = address(0x0);
 
     Phase public currentPhase;
 
@@ -49,6 +47,8 @@ contract vIntermediatePool is IvIntermediatePool {
     address public immutable factory;
     AggregatorV3Interface public immutable priceFeed0;
     AggregatorV3Interface public immutable priceFeed1;
+    address public immutable vsRouter;
+    address public immutable vsPair;
 
     constructor(
         address _factory,
@@ -56,6 +56,8 @@ contract vIntermediatePool is IvIntermediatePool {
         address _token1,
         address _priceFeed0,
         address _priceFeed1,
+        address _vsRouter,
+        address _vsPair,
         uint256 _startTimestamp
     ) {
         factory = _factory;
@@ -65,6 +67,8 @@ contract vIntermediatePool is IvIntermediatePool {
         priceFeed1 = AggregatorV3Interface(_priceFeed1);
         startTimestamp = _startTimestamp;
         currentPhase = Phase.CLOSED;
+        vsRouter = _vsRouter;
+        vsPair = _vsPair;
     }
 
     function triggerDepositPhase() external override {
@@ -191,7 +195,7 @@ contract vIntermediatePool is IvIntermediatePool {
             }
         }
 
-        IvRouter(VIRTUSWAP_ROUTER).addLiquidity(
+        IvRouter(vsRouter).addLiquidity(
             token0,
             token1,
             optimalTotal.amount0,
@@ -205,7 +209,7 @@ contract vIntermediatePool is IvIntermediatePool {
         totalTransferred0 += optimalTotal.amount0;
         depositsProcessed = upperBound;
         if (upperBound == totalDeposits) {
-            totalLpTokens = IERC20(VIRTUSWAP_PAIR).balanceOf(address(this));
+            totalLpTokens = IERC20(vsPair).balanceOf(address(this));
             currentPhase = Phase.WITHDRAW;
         }
     }
@@ -258,11 +262,7 @@ contract vIntermediatePool is IvIntermediatePool {
                     totalTransferred0;
                 tokensTransferred0[index][uint8(i)] = 0;
                 if (lpTokensAmount > 0) {
-                    SafeERC20.safeTransfer(
-                        IERC20(VIRTUSWAP_PAIR),
-                        _to,
-                        lpTokensAmount
-                    );
+                    SafeERC20.safeTransfer(IERC20(vsPair), _to, lpTokensAmount);
                 }
             }
         }

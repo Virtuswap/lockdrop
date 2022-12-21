@@ -4,6 +4,7 @@ pragma solidity ^0.8.0;
 
 import './vIntermediatePool.sol';
 import './interfaces/IvIntermediatePoolFactory.sol';
+import './interfaces/virtuswap/IvPairFactory.sol';
 
 contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
     mapping(address => mapping(address => address)) public pools;
@@ -11,12 +12,17 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
 
     address public admin;
 
+    address public immutable vsRouter;
+    address public immutable vsPairFactory;
+
     modifier onlyAdmin() {
         require(msg.sender == admin, 'OA');
         _;
     }
 
-    constructor() {
+    constructor(address _vsRouter, address _vsPairFactory) {
+        vsRouter = _vsRouter;
+        vsPairFactory = _vsPairFactory;
         admin = msg.sender;
     }
 
@@ -45,6 +51,8 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
                 _token1,
                 _priceFeed0,
                 _priceFeed1,
+                vsRouter,
+                IvPairFactory(vsPairFactory).getPair(_token0, _token1),
                 _startTimestamp
             )
         );
