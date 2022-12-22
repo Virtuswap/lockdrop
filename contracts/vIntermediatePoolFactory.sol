@@ -36,8 +36,8 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
     function createPool(
         address _token0,
         address _token1,
-        address _priceFeed0,
-        address _priceFeed1,
+        address _uniswapOracle,
+        address _priceFeedRegistry,
         uint256 _startTimestamp
     ) external override returns (address pool) {
         require(_token0 != _token1, 'Identical addresses');
@@ -49,8 +49,8 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
                 address(this),
                 _token0,
                 _token1,
-                _priceFeed0,
-                _priceFeed1,
+                _uniswapOracle,
+                _priceFeedRegistry,
                 vsRouter,
                 IvPairFactory(vsPairFactory).getPair(_token0, _token1),
                 _startTimestamp

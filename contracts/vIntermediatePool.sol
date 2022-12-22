@@ -8,8 +8,9 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import '@openzeppelin/contracts/utils/math/Math.sol';
 import './interfaces/IvIntermediatePool.sol';
 import './interfaces/virtuswap/IvRouter.sol';
+import './vPriceOracle.sol';
 
-contract vIntermediatePool is IvIntermediatePool {
+contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     enum Phase {
         CLOSED,
         DEPOSIT,
@@ -18,7 +19,6 @@ contract vIntermediatePool is IvIntermediatePool {
     }
 
     uint8 public constant AVAILABLE_LOCKING_WEEKS_MASK = 0xe;
-    uint8 public constant PRICE_RATIO_SHIFT_SIZE = 32;
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
     uint256 public constant PRICE_UPDATE_FREQ = 1 days;
 
@@ -40,8 +40,6 @@ contract vIntermediatePool is IvIntermediatePool {
     address public immutable token0;
     address public immutable token1;
     address public immutable factory;
-    AggregatorV3Interface public immutable priceFeed0;
-    AggregatorV3Interface public immutable priceFeed1;
     address public immutable vsRouter;
     address public immutable vsPair;
 
@@ -49,17 +47,15 @@ contract vIntermediatePool is IvIntermediatePool {
         address _factory,
         address _token0,
         address _token1,
-        address _priceFeed0,
-        address _priceFeed1,
         address _vsRouter,
         address _vsPair,
+        address _uniswapOracle,
+        address _priceFeedRegister,
         uint256 _startTimestamp
-    ) {
+    ) vPriceOracle(_token0, _token1, _uniswapOracle, _priceFeedRegister) {
         factory = _factory;
         token0 = _token0;
         token1 = _token1;
-        priceFeed0 = AggregatorV3Interface(_priceFeed0);
-        priceFeed1 = AggregatorV3Interface(_priceFeed1);
         startTimestamp = _startTimestamp;
         currentPhase = Phase.CLOSED;
         vsRouter = _vsRouter;
@@ -86,7 +82,7 @@ contract vIntermediatePool is IvIntermediatePool {
         );
         currentPhase = Phase.TRANSFER;
         lastPriceFeedTimestamp = block.timestamp;
-        priceRatioShifted = _getCurrentPriceRatioShifted();
+        priceRatioShifted = getCurrentPriceRatioShifted();
     }
 
     function deposit(
@@ -109,7 +105,7 @@ contract vIntermediatePool is IvIntermediatePool {
             lastPriceFeedTimestamp == 0
         ) {
             lastPriceFeedTimestamp = block.timestamp;
-            priceRatioShifted = _getCurrentPriceRatioShifted();
+            priceRatioShifted = getCurrentPriceRatioShifted();
         }
 
         (
@@ -263,13 +259,6 @@ contract vIntermediatePool is IvIntermediatePool {
         }
     }
 
-    function getLatestPrice(
-        AggregatorV3Interface priceFeed
-    ) public view returns (int price) {
-        (, price, , , ) = priceFeed.latestRoundData();
-        return price;
-    }
-
     function viewLeftovers(
         address _who
     )
@@ -315,12 +304,6 @@ contract vIntermediatePool is IvIntermediatePool {
                 locking_weeks[outIndex++] = uint8(i);
             }
         }
-    }
-
-    function _getCurrentPriceRatioShifted() private view returns (uint256) {
-        return
-            (uint256(getLatestPrice(priceFeed1)) << PRICE_RATIO_SHIFT_SIZE) /
-            uint256(getLatestPrice(priceFeed0));
     }
 
     function _calculateOptimalAmounts(
