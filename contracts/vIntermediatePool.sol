@@ -10,11 +10,6 @@ import './interfaces/IvIntermediatePool.sol';
 import './interfaces/virtuswap/IvRouter.sol';
 
 contract vIntermediatePool is IvIntermediatePool {
-    struct AmountPair {
-        uint256 amount0;
-        uint256 amount1;
-    }
-
     enum Phase {
         CLOSED,
         DEPOSIT,
@@ -273,6 +268,53 @@ contract vIntermediatePool is IvIntermediatePool {
     ) public view returns (int price) {
         (, price, , , ) = priceFeed.latestRoundData();
         return price;
+    }
+
+    function viewLeftovers(
+        address _who
+    )
+        external
+        view
+        override
+        returns (AmountPair[3] memory amounts, uint8[3] memory locking_weeks)
+    {
+        require(
+            currentPhase == Phase.WITHDRAW,
+            'Unable to view leftovers during current phase'
+        );
+        uint256 index = depositIndexes[_who];
+        uint256 outIndex;
+        for (uint256 i = 1; i < 256; i <<= 1) {
+            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                amounts[outIndex] = deposits[index][uint8(i)];
+                locking_weeks[outIndex++] = uint8(i);
+            }
+        }
+    }
+
+    function viewLpTokens(
+        address _who
+    )
+        external
+        view
+        override
+        returns (uint256[3] memory amount, uint8[3] memory locking_weeks)
+    {
+        require(
+            currentPhase == Phase.WITHDRAW,
+            'Unable to view leftovers during current phase'
+        );
+        uint256 index = depositIndexes[_who];
+        uint256 _totalLpTokens = totalLpTokens;
+        uint256 outIndex;
+        for (uint256 i = 1; i < 256; i <<= 1) {
+            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                amount[outIndex] =
+                    (tokensTransferred0[index][uint8(i)] * _totalLpTokens) /
+                    totalTransferred0;
+                locking_weeks[outIndex++] = uint8(i);
+            }
+        }
     }
 
     function _getCurrentPriceRatioShifted() private view returns (uint256) {

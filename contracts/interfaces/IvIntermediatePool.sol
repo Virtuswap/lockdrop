@@ -3,6 +3,11 @@
 pragma solidity ^0.8.0;
 
 interface IvIntermediatePool {
+    struct AmountPair {
+        uint256 amount0;
+        uint256 amount1;
+    }
+
     function triggerDepositPhase() external;
 
     function triggerTransferPhase() external;
@@ -18,4 +23,18 @@ interface IvIntermediatePool {
     function withdrawLeftovers(address _to) external;
 
     function claimLpTokens(address _to) external;
+
+    function viewLeftovers(
+        address _who
+    )
+        external
+        view
+        returns (AmountPair[3] memory amounts, uint8[3] memory locking_weeks);
+
+    function viewLpTokens(
+        address _who
+    )
+        external
+        view
+        returns (uint256[3] memory amount, uint8[3] memory locking_weeks);
 }
