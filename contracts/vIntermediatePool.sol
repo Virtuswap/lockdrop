@@ -286,6 +286,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 outIndex;
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                assert(outIndex < 3);
                 amounts[outIndex] = deposits[index][uint8(i)];
                 locking_weeks[outIndex++] = uint8(i);
             }
@@ -309,6 +310,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 outIndex;
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                assert(outIndex < 3);
                 amount[outIndex] =
                     (tokensTransferred0[index][uint8(i)] * _totalLpTokens) /
                     totalTransferred0;
