@@ -20,6 +20,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     }
 
     uint8 public constant AVAILABLE_LOCKING_WEEKS_MASK = 0xe;
+    uint8 public constant LOCKING_WEEKS_NUMBER = 3;
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
     uint256 public constant PRICE_UPDATE_FREQ = 1 days;
 
@@ -224,10 +225,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 index = depositIndexes[_to];
         require(index != 0, 'Nothing to withdraw');
         (
-            AmountPair[3] memory amounts,
-            uint8[3] memory locking_weeks
+            AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
+            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
         ) = _calculateLeftovers(_to);
-        for (uint256 i = 0; i < 3; ++i) {
+        for (uint256 i = 0; i < LOCKING_WEEKS_NUMBER; ++i) {
             deposits[index][locking_weeks[i]] = AmountPair(0, 0);
             if (amounts[i].amount0 > 0) {
                 SafeERC20.safeTransfer(IERC20(token0), _to, amounts[i].amount0);
@@ -247,10 +248,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         require(index != 0, 'Nothing to claim');
         uint256 _startTimestamp = startTimestamp;
         (
-            uint256[3] memory amounts,
-            uint8[3] memory locking_weeks
+            uint256[LOCKING_WEEKS_NUMBER] memory amounts,
+            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
         ) = _calculateLpTokens(_to);
-        for (uint256 i = 0; i < 3; ++i) {
+        for (uint256 i = 0; i < LOCKING_WEEKS_NUMBER; ++i) {
             if (block.timestamp < _startTimestamp + locking_weeks[i] * 1 weeks)
                 break;
             tokensTransferred0[index][locking_weeks[i]] = 0;
@@ -266,7 +267,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         external
         view
         override
-        returns (AmountPair[3] memory amounts, uint8[3] memory locking_weeks)
+        returns (
+            AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
+            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+        )
     {
         require(
             currentPhase == Phase.WITHDRAW,
@@ -281,7 +285,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         external
         view
         override
-        returns (uint256[3] memory amounts, uint8[3] memory locking_weeks)
+        returns (
+            uint256[LOCKING_WEEKS_NUMBER] memory amounts,
+            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+        )
     {
         require(
             currentPhase == Phase.WITHDRAW,
@@ -312,14 +319,17 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     )
         private
         view
-        returns (uint256[3] memory amounts, uint8[3] memory locking_weeks)
+        returns (
+            uint256[LOCKING_WEEKS_NUMBER] memory amounts,
+            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+        )
     {
         uint256 index = depositIndexes[_who];
         uint256 _totalLpTokens = totalLpTokens;
         uint256 outIndex;
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                assert(outIndex < 3);
+                assert(outIndex < LOCKING_WEEKS_NUMBER);
                 amounts[outIndex] =
                     (tokensTransferred0[index][uint8(i)] * _totalLpTokens) /
                     totalTransferred0;
@@ -333,13 +343,16 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     )
         private
         view
-        returns (AmountPair[3] memory amounts, uint8[3] memory locking_weeks)
+        returns (
+            AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
+            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+        )
     {
         uint256 index = depositIndexes[_who];
         uint256 outIndex;
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                assert(outIndex < 3);
+                assert(outIndex < LOCKING_WEEKS_NUMBER);
                 amounts[outIndex] = deposits[index][uint8(i)];
                 locking_weeks[outIndex++] = uint8(i);
             }
