@@ -20,9 +20,9 @@ interface IvIntermediatePool {
 
     function transferToRealPool(uint256 _transfersNumber) external;
 
-    function withdrawLeftovers(address _to) external;
+    function claimLeftovers(address _to) external;
 
-    function claimLpTokens(address _to) external;
+    function withdrawLpTokens(address _to) external;
 
     function viewLeftovers(
         address _who

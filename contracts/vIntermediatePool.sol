@@ -225,7 +225,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         }
     }
 
-    function withdrawLeftovers(address _to) external override {
+    function claimLeftovers(address _to) external override {
         require(
             currentPhase == Phase.WITHDRAW,
             'Unable to withdraw during current phase'
@@ -247,7 +247,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         }
     }
 
-    function claimLpTokens(address _to) external override {
+    function withdrawLpTokens(address _to) external override {
         require(
             currentPhase == Phase.WITHDRAW,
             'Unable to withdraw during current phase'
