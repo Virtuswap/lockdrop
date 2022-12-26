@@ -13,16 +13,14 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
     address public admin;
 
     address public immutable vsRouter;
-    address public immutable vsPairFactory;
 
     modifier onlyAdmin() {
         require(msg.sender == admin, 'OA');
         _;
     }
 
-    constructor(address _vsRouter, address _vsPairFactory) {
+    constructor(address _vsRouter) {
         vsRouter = _vsRouter;
-        vsPairFactory = _vsPairFactory;
         admin = msg.sender;
     }
 
@@ -52,7 +50,6 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
                 _uniswapOracle,
                 _priceFeedRegistry,
                 vsRouter,
-                IvPairFactory(vsPairFactory).getPair(_token0, _token1),
                 _startTimestamp
             )
         );

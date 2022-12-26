@@ -8,6 +8,7 @@ import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import '@openzeppelin/contracts/utils/math/Math.sol';
 import './interfaces/IvIntermediatePool.sol';
 import './interfaces/virtuswap/IvRouter.sol';
+import './interfaces/virtuswap/IvPairFactory.sol';
 import './vPriceOracle.sol';
 
 contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
@@ -48,7 +49,6 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         address _token0,
         address _token1,
         address _vsRouter,
-        address _vsPair,
         address _uniswapOracle,
         address _priceFeedRegister,
         uint256 _startTimestamp
@@ -59,6 +59,16 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         startTimestamp = _startTimestamp;
         currentPhase = Phase.CLOSED;
         vsRouter = _vsRouter;
+        address _vsPair = address(
+            IvPairFactory(IvRouter(_vsRouter).factory()).getPair(
+                _token0,
+                _token1
+            )
+        );
+        require(
+            _vsPair != address(0),
+            "VSPair with these tokens doesn't exist"
+        );
         vsPair = _vsPair;
     }
 

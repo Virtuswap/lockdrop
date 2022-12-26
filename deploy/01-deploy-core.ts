@@ -9,12 +9,11 @@ const deployCore: DeployFunction = async function (
     const { deploy, log } = deployments;
 
     const vsRouter = await deployments.get('MockVRouter');
-    const vsPairFactory = await deployments.get('MockVPairFactory');
 
     const intermediatePoolFactory = await deploy('intermediatePoolFactory', {
         from: deployer,
         contract: 'vIntermediatePoolFactory',
-        args: [vsRouter.address, vsPairFactory.address],
+        args: [vsRouter.address],
         log: true,
     });
 };
