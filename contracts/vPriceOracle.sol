@@ -3,52 +3,35 @@
 pragma solidity ^0.8.0;
 
 import '@mean-finance/uniswap-v3-oracle/solidity/interfaces/IStaticOracle.sol';
-import './interfaces/IvPriceOracle.sol';
-import './interfaces/IPriceFeedRegistry.sol';
 import './vUniswapPriceOracle.sol';
 import './vChainlinkPriceOracle.sol';
 
-abstract contract vPriceOracle is IvPriceOracle {
-    uint8 public constant PRICE_RATIO_SHIFT_SIZE = 32;
-
-    IvPriceOracle public currentOracle;
+abstract contract vPriceOracle is vChainlinkPriceOracle, vUniswapPriceOracle {
+    bool public isUniswapOracle;
 
     constructor(
         address _token0,
         address _token1,
         address _uniswapOracle,
-        address _priceFeedRegistry
-    ) {
+        address _priceFeed0,
+        address _priceFeed1
+    )
+        vUniswapPriceOracle(_token0, _token1, _uniswapOracle)
+        vChainlinkPriceOracle(_priceFeed0, _priceFeed1)
+    {
         if (IStaticOracle(_uniswapOracle).isPairSupported(_token0, _token1)) {
-            currentOracle = IvPriceOracle(
-                new vUniswapPriceOracle(_token0, _token1, _uniswapOracle)
-            );
-        } else if (
-            IPriceFeedRegistry(_priceFeedRegistry).isPairSupported(
-                _token0,
-                _token1
-            )
-        ) {
-            currentOracle = IvPriceOracle(
-                new vChainlinkPriceOracle(
-                    IPriceFeedRegistry(_priceFeedRegistry).getPriceFeed(
-                        _token0
-                    ),
-                    IPriceFeedRegistry(_priceFeedRegistry).getPriceFeed(_token1)
-                )
-            );
+            isUniswapOracle = true;
+        } else if (_priceFeed0 != address(0) && _priceFeed1 != address(0)) {
+            isUniswapOracle = false;
         } else {
             revert('No oracle is available for the tokens');
         }
-        assert(address(currentOracle) != address(0));
     }
 
-    function getCurrentPriceRatioShifted()
-        public
-        view
-        override
-        returns (uint256)
-    {
-        return currentOracle.getCurrentPriceRatioShifted();
+    function getCurrentPriceRatioShifted() public view returns (uint256) {
+        return
+            isUniswapOracle
+                ? getUniswapCurrentPriceRatioShifted()
+                : getChainlinkCurrentPriceRatioShifted();
     }
 }

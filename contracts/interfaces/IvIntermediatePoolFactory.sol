@@ -11,6 +11,7 @@ interface IvIntermediatePoolFactory {
     function createPool(
         address _token0,
         address _token1,
+        address _uniswapOracle,
         address _priceFeed0,
         address _priceFeed1,
         uint256 _startTimestamp

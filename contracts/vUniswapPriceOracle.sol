@@ -3,12 +3,9 @@
 pragma solidity ^0.8.0;
 
 import '@mean-finance/uniswap-v3-oracle/solidity/interfaces/IStaticOracle.sol';
-import './interfaces/IvPriceOracle.sol';
+import './vPriceOracleBase.sol';
 
-contract vUniswapPriceOracle is IvPriceOracle {
-    uint32 private constant TIME_PERIOD = 60;
-    uint8 public constant PRICE_RATIO_SHIFT_SIZE = 32;
-
+abstract contract vUniswapPriceOracle is vPriceOracleBase {
     IStaticOracle public immutable uniswapV3Oracle;
     address private immutable token0;
     address private immutable token1;
@@ -19,17 +16,16 @@ contract vUniswapPriceOracle is IvPriceOracle {
         uniswapV3Oracle = IStaticOracle(_uniswapV3Oracle);
     }
 
-    function getCurrentPriceRatioShifted()
-        external
+    function getUniswapCurrentPriceRatioShifted()
+        public
         view
-        override
         returns (uint256 quoteAmount)
     {
         (quoteAmount, ) = uniswapV3Oracle.quoteAllAvailablePoolsWithTimePeriod(
             PRICE_RATIO_SHIFT_SIZE,
             token0,
             token1,
-            TIME_PERIOD
+            UNISWAP_ORACLE_TIME_PERIOD
         );
     }
 }

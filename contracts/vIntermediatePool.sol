@@ -50,9 +50,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         address _token1,
         address _vsRouter,
         address _uniswapOracle,
-        address _priceFeedRegister,
+        address _priceFeed0,
+        address _priceFeed1,
         uint256 _startTimestamp
-    ) vPriceOracle(_token0, _token1, _uniswapOracle, _priceFeedRegister) {
+    ) vPriceOracle(_token0, _token1, _uniswapOracle, _priceFeed0, _priceFeed1) {
         factory = _factory;
         token0 = _token0;
         token1 = _token1;

@@ -3,11 +3,9 @@
 pragma solidity ^0.8.0;
 
 import '@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol';
-import './interfaces/IvPriceOracle.sol';
+import './vPriceOracleBase.sol';
 
-contract vChainlinkPriceOracle is IvPriceOracle {
-    uint8 public constant PRICE_RATIO_SHIFT_SIZE = 32;
-
+abstract contract vChainlinkPriceOracle is vPriceOracleBase {
     AggregatorV3Interface public immutable priceFeed0;
     AggregatorV3Interface public immutable priceFeed1;
 
@@ -16,10 +14,9 @@ contract vChainlinkPriceOracle is IvPriceOracle {
         priceFeed1 = AggregatorV3Interface(_priceFeed1);
     }
 
-    function getCurrentPriceRatioShifted()
+    function getChainlinkCurrentPriceRatioShifted()
         public
         view
-        override
         returns (uint256)
     {
         return
