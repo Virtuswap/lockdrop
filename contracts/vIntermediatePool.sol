@@ -167,6 +167,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             currentPhase == Phase.TRANSFER,
             'Unable to transfer during current phase'
         );
+        require(_transfersNumber > 0, 'Transfers number must be positive');
 
         uint256 upperBound = Math.min(
             depositsProcessed + _transfersNumber,
@@ -176,7 +177,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 optimalAmount1;
         AmountPair memory amounts;
         AmountPair memory optimalTotal;
-        for (uint256 i = depositsProcessed; i < upperBound; ++i) {
+        for (uint256 i = depositsProcessed + 1; i <= upperBound; ++i) {
             for (uint256 j = 1; j < 256; j <<= 1) {
                 if (AVAILABLE_LOCKING_WEEKS_MASK & j != 0) {
                     amounts = deposits[i][uint8(j)];
@@ -197,7 +198,14 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                 }
             }
         }
-
+        IERC20(token0).approve(
+            vsRouter,
+            IERC20(token0).balanceOf(address(this))
+        );
+        IERC20(token1).approve(
+            vsRouter,
+            IERC20(token1).balanceOf(address(this))
+        );
         IvRouter(vsRouter).addLiquidity(
             token0,
             token1,
