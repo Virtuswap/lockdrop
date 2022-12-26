@@ -3,6 +3,8 @@ import { network, deployments, ethers } from 'hardhat';
 import {
     vIntermediatePool,
     vIntermediatePoolFactory,
+    MockUniswapOracle,
+    MockVPairFactory,
     MockV3Aggregator0,
     mockV3Aggregator1,
 } from '../../typechain-types';
@@ -11,8 +13,10 @@ import { time } from '@nomicfoundation/hardhat-network-helpers';
 describe('vIntermediatePool: Phase 1', function () {
     let intermediatePoolFactory: vIntermediatePoolFactory;
     let intermediatePool: vIntermediatePool;
+    let mockUniswapOracle: MockUniswapOracle;
     let mockV3Aggregator0: MockV3Aggregator0;
     let mockV3Aggregator1: MockV3Aggregator1;
+    let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
     let token1: Token1;
     let deployer: SignerWithAddress;
@@ -24,13 +28,17 @@ describe('vIntermediatePool: Phase 1', function () {
         intermediatePoolFactory = await ethers.getContract(
             'intermediatePoolFactory'
         );
+        mockVPairFactory = await ethers.getContract('MockVPairFactory');
+        mockUniswapOracle = await ethers.getContract('MockUniswapOracle');
         mockV3Aggregator0 = await ethers.getContract('MockV3Aggregator0');
         mockV3Aggregator1 = await ethers.getContract('MockV3Aggregator1');
         token0 = await ethers.getContract('Token0');
         token1 = await ethers.getContract('Token1');
+        await mockVPairFactory.createPair(token0.address, token1.address);
         await intermediatePoolFactory.createPool(
             token0.address,
             token1.address,
+            mockUniswapOracle.address,
             mockV3Aggregator0.address,
             mockV3Aggregator1.address,
             await time.latest()

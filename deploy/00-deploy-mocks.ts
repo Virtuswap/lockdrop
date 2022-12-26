@@ -5,6 +5,7 @@ const DECIMALS = '8';
 const INITIAL_PRICE_0 = '200000000';
 const INITIAL_PRICE_1 = '100000000';
 const INITIAL_TOKEN_AMOUNT = '2000000000000000000000';
+const CARDINALITY_PER_MINUTE = '120';
 const deployMocks: DeployFunction = async function (
     hre: HardhatRuntimeEnvironment
 ) {
@@ -14,6 +15,18 @@ const deployMocks: DeployFunction = async function (
     const chainId = network.config.chainId;
 
     if (chainId == 31337) {
+        const uniswapV3Factory = await deploy('MockUniswapV3Factory', {
+            contract: 'MockUniswapV3Factory',
+            from: deployer,
+            log: true,
+            args: [],
+        });
+        await deploy('MockUniswapOracle', {
+            contract: 'MockStaticOracle',
+            from: deployer,
+            log: true,
+            args: [uniswapV3Factory.address, CARDINALITY_PER_MINUTE],
+        });
         await deploy('MockV3Aggregator0', {
             contract: 'MockV3Aggregator',
             from: deployer,
