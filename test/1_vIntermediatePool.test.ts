@@ -302,3 +302,183 @@ describe('vIntermediatePool: Phase 2', function () {
         );
     });
 });
+
+describe('vIntermediatePool: Phase 3', function () {
+    let intermediatePoolFactory: vIntermediatePoolFactory;
+    let intermediatePool: vIntermediatePool;
+    let mockUniswapOracle: MockUniswapOracle;
+    let mockV3Aggregator0: MockV3Aggregator0;
+    let mockV3Aggregator1: MockV3Aggregator1;
+    let mockVPairFactory: MockVPairFactory;
+    let token0: Token0;
+    let token1: Token1;
+    let deployer: SignerWithAddress;
+    let accounts;
+    let pair;
+
+    beforeEach(async () => {
+        accounts = await ethers.getSigners();
+        deployer = accounts[0];
+        await deployments.fixture(['all']);
+        intermediatePoolFactory = await ethers.getContract(
+            'intermediatePoolFactory'
+        );
+        mockVPairFactory = await ethers.getContract('MockVPairFactory');
+        mockUniswapOracle = await ethers.getContract('MockUniswapOracle');
+        mockV3Aggregator0 = await ethers.getContract('MockV3Aggregator0');
+        mockV3Aggregator1 = await ethers.getContract('MockV3Aggregator1');
+        token0 = await ethers.getContract('Token0');
+        token1 = await ethers.getContract('Token1');
+        await mockVPairFactory.createPair(token0.address, token1.address);
+        await intermediatePoolFactory.createPool(
+            token0.address,
+            token1.address,
+            mockUniswapOracle.address,
+            mockV3Aggregator0.address,
+            mockV3Aggregator1.address,
+            await time.latest()
+        );
+        const intermediatePoolAddress = await intermediatePoolFactory.getPool(
+            token0.address,
+            token1.address
+        );
+        const factory = await ethers.getContractFactory('vIntermediatePool');
+        intermediatePool = await factory.attach(intermediatePoolAddress);
+
+        pair = (await ethers.getContractFactory('MockVPair')).attach(
+            await mockVPairFactory.getPair(token0.address, token1.address)
+        );
+
+        await intermediatePool.triggerDepositPhase();
+        await token0.approve(
+            intermediatePool.address,
+            ethers.utils.parseEther('1000')
+        );
+        await token1.approve(
+            intermediatePool.address,
+            ethers.utils.parseEther('1000')
+        );
+        // Deposit phase
+
+        let amount0 = ethers.utils.parseEther('10');
+        let amount1 = ethers.utils.parseEther('10');
+        // induce leftovers
+        await mockV3Aggregator0.updateAnswer(175000000);
+        for (const account of accounts) {
+            await token0.mint(account.address, ethers.utils.parseEther('1000'));
+            await token1.mint(account.address, ethers.utils.parseEther('1000'));
+            await token0
+                .connect(account)
+                .approve(
+                    intermediatePool.address,
+                    ethers.utils.parseEther('1000')
+                );
+            await token1
+                .connect(account)
+                .approve(
+                    intermediatePool.address,
+                    ethers.utils.parseEther('1000')
+                );
+
+            await intermediatePool
+                .connect(account)
+                .deposit(amount0, amount1, 4);
+        }
+
+        await intermediatePool.deposit(amount0, amount1, 8);
+        await intermediatePool
+            .connect(accounts[2])
+            .deposit(amount0, amount1, 8);
+        await intermediatePool
+            .connect(accounts[1])
+            .deposit(amount0, amount1, 2);
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
+        // final price
+        await mockV3Aggregator0.updateAnswer(200000000);
+        await intermediatePool.triggerTransferPhase();
+        // transfer phase
+        await intermediatePool.transferToRealPool(10000);
+    });
+
+    it('Claim leftovers for myself', async () => {
+        const leftoversBefore = (
+            await intermediatePool.viewLeftovers(deployer.address)
+        ).toString();
+        const balanceBefore = await token1.balanceOf(deployer.address);
+        await intermediatePool.claimLeftovers(deployer.address);
+        const leftoversAfter = (
+            await intermediatePool.viewLeftovers(deployer.address)
+        ).toString();
+        const balanceAfter = await token1.balanceOf(deployer.address);
+        expect(
+            leftoversAfter
+                .slice(0, -6)
+                .split(',')
+                .every((item) => item == '0')
+        );
+        expect(
+            leftoversBefore
+                .slice(0, -6)
+                .split(',')
+                .some((item) => item != '0')
+        );
+        expect(balanceAfter).to.be.above(balanceBefore);
+    });
+
+    it('Claim leftovers twice', async () => {
+        await intermediatePool.claimLeftovers(deployer.address);
+        const balanceBefore = await token1.balanceOf(deployer.address);
+        await intermediatePool.claimLeftovers(deployer.address);
+        const balanceAfter = await token1.balanceOf(deployer.address);
+        expect(balanceAfter).to.be.equal(balanceBefore);
+    });
+
+    it('Withdraw lp tokens for myself', async () => {
+        const lpTokensBefore = await pair.balanceOf(deployer.address);
+        await intermediatePool.withdrawLpTokens(deployer.address);
+        const lpTokensAfter1 = await pair.balanceOf(deployer.address);
+
+        // nothing is withdrawn because of locking
+        expect(lpTokensAfter1).to.equal(lpTokensBefore);
+
+        // 4 weeks passed
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 4 * 7 * 24 * 60 * 60
+        );
+
+        await intermediatePool.withdrawLpTokens(deployer.address);
+        const lpTokensAfter2 = await pair.balanceOf(deployer.address);
+        // only 4-weeks tokens are withdrawn
+        expect(lpTokensAfter2).to.be.above(lpTokensAfter1);
+
+        // another 4 weeks passed
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 4 * 7 * 24 * 60 * 60
+        );
+
+        await intermediatePool.withdrawLpTokens(deployer.address);
+        const lpTokensAfter3 = await pair.balanceOf(deployer.address);
+        // all lp tokens are withdrawn
+        expect(lpTokensAfter3).to.be.above(lpTokensAfter2);
+    });
+
+    it('Withdraw all lp tokens tokens', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 8 * 7 * 24 * 60 * 60
+        );
+        for (const account of accounts) {
+            await intermediatePool.withdrawLpTokens(account.address);
+        }
+        expect(await pair.balanceOf(intermediatePool.address)).to.be.equal(0);
+    });
+
+    it('Claim all leftovers', async () => {
+        for (const account of accounts) {
+            await intermediatePool.claimLeftovers(account.address);
+        }
+        expect(await token0.balanceOf(intermediatePool.address)).to.be.equal(0);
+        expect(await token1.balanceOf(intermediatePool.address)).to.be.equal(0);
+    });
+});
