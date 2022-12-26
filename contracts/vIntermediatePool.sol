@@ -223,25 +223,17 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         );
         uint256 index = depositIndexes[_to];
         require(index != 0, 'Nothing to withdraw');
-        AmountPair memory amounts;
-        for (uint256 i = 1; i < 256; i <<= 1) {
-            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                amounts = deposits[index][uint8(i)];
-                deposits[index][uint8(i)] = AmountPair(0, 0);
-                if (amounts.amount0 > 0) {
-                    SafeERC20.safeTransfer(
-                        IERC20(token0),
-                        _to,
-                        amounts.amount0
-                    );
-                }
-                if (amounts.amount1 > 0) {
-                    SafeERC20.safeTransfer(
-                        IERC20(token1),
-                        _to,
-                        amounts.amount1
-                    );
-                }
+        (
+            AmountPair[3] memory amounts,
+            uint8[3] memory locking_weeks
+        ) = _calculateLeftovers(_to);
+        for (uint256 i = 0; i < 3; ++i) {
+            deposits[index][locking_weeks[i]] = AmountPair(0, 0);
+            if (amounts[i].amount0 > 0) {
+                SafeERC20.safeTransfer(IERC20(token0), _to, amounts[i].amount0);
+            }
+            if (amounts[i].amount1 > 0) {
+                SafeERC20.safeTransfer(IERC20(token1), _to, amounts[i].amount1);
             }
         }
     }
@@ -254,18 +246,16 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 index = depositIndexes[_to];
         require(index != 0, 'Nothing to claim');
         uint256 _startTimestamp = startTimestamp;
-        uint256 _totalLpTokens = totalLpTokens;
-        uint256 lpTokensAmount;
-        for (uint256 i = 1; i < 256; i <<= 1) {
-            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                if (block.timestamp < _startTimestamp + i * 1 weeks) break;
-                lpTokensAmount =
-                    (tokensTransferred0[index][uint8(i)] * _totalLpTokens) /
-                    totalTransferred0;
-                tokensTransferred0[index][uint8(i)] = 0;
-                if (lpTokensAmount > 0) {
-                    SafeERC20.safeTransfer(IERC20(vsPair), _to, lpTokensAmount);
-                }
+        (
+            uint256[3] memory amounts,
+            uint8[3] memory locking_weeks
+        ) = _calculateLpTokens(_to);
+        for (uint256 i = 0; i < 3; ++i) {
+            if (block.timestamp < _startTimestamp + locking_weeks[i] * 1 weeks)
+                break;
+            tokensTransferred0[index][locking_weeks[i]] = 0;
+            if (amounts[i] > 0) {
+                SafeERC20.safeTransfer(IERC20(vsPair), _to, amounts[i]);
             }
         }
     }
@@ -282,15 +272,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             currentPhase == Phase.WITHDRAW,
             'Unable to view leftovers during current phase'
         );
-        uint256 index = depositIndexes[_who];
-        uint256 outIndex;
-        for (uint256 i = 1; i < 256; i <<= 1) {
-            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                assert(outIndex < 3);
-                amounts[outIndex] = deposits[index][uint8(i)];
-                locking_weeks[outIndex++] = uint8(i);
-            }
-        }
+        return _calculateLeftovers(_who);
     }
 
     function viewLpTokens(
@@ -299,24 +281,13 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         external
         view
         override
-        returns (uint256[3] memory amount, uint8[3] memory locking_weeks)
+        returns (uint256[3] memory amounts, uint8[3] memory locking_weeks)
     {
         require(
             currentPhase == Phase.WITHDRAW,
             'Unable to view leftovers during current phase'
         );
-        uint256 index = depositIndexes[_who];
-        uint256 _totalLpTokens = totalLpTokens;
-        uint256 outIndex;
-        for (uint256 i = 1; i < 256; i <<= 1) {
-            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                assert(outIndex < 3);
-                amount[outIndex] =
-                    (tokensTransferred0[index][uint8(i)] * _totalLpTokens) /
-                    totalTransferred0;
-                locking_weeks[outIndex++] = uint8(i);
-            }
-        }
+        return _calculateLpTokens(_who);
     }
 
     function _calculateOptimalAmounts(
@@ -333,6 +304,45 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                 (_amount1 << PRICE_RATIO_SHIFT_SIZE) /
                 priceRatioShifted;
             optimalAmount1 = _amount1;
+        }
+    }
+
+    function _calculateLpTokens(
+        address _who
+    )
+        private
+        view
+        returns (uint256[3] memory amounts, uint8[3] memory locking_weeks)
+    {
+        uint256 index = depositIndexes[_who];
+        uint256 _totalLpTokens = totalLpTokens;
+        uint256 outIndex;
+        for (uint256 i = 1; i < 256; i <<= 1) {
+            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                assert(outIndex < 3);
+                amounts[outIndex] =
+                    (tokensTransferred0[index][uint8(i)] * _totalLpTokens) /
+                    totalTransferred0;
+                locking_weeks[outIndex++] = uint8(i);
+            }
+        }
+    }
+
+    function _calculateLeftovers(
+        address _who
+    )
+        private
+        view
+        returns (AmountPair[3] memory amounts, uint8[3] memory locking_weeks)
+    {
+        uint256 index = depositIndexes[_who];
+        uint256 outIndex;
+        for (uint256 i = 1; i < 256; i <<= 1) {
+            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                assert(outIndex < 3);
+                amounts[outIndex] = deposits[index][uint8(i)];
+                locking_weeks[outIndex++] = uint8(i);
+            }
         }
     }
 }
