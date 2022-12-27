@@ -14,7 +14,8 @@ interface IvIntermediatePoolFactory {
         address _uniswapOracle,
         address _priceFeed0,
         address _priceFeed1,
-        uint256 _startTimestamp
+        uint256 _startTimestamp,
+        uint256 _totalVrswAllocated
     ) external returns (address pool);
 
     function changeAdmin(address _newAdmin) external;

@@ -37,4 +37,6 @@ interface IvIntermediatePool {
         external
         view
         returns (uint256[3] memory amount, uint8[3] memory locking_weeks);
+
+    function viewVrswTokens(address _who) external view returns (uint256);
 }

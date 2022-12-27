@@ -30,6 +30,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public depositsProcessed;
     uint256 public totalLpTokens;
     uint256 public totalTransferred0;
+    uint256 public totalTransferredWeighted;
+    mapping(address => mapping(uint8 => bool)) public lpTokensWithdrawn;
+    mapping(address => bool) public leftoversClaimed;
+    mapping(address => bool) public vrswClaimed;
     mapping(address => uint256) public depositIndexes;
     mapping(uint256 => address) public indexToAddress;
     mapping(uint256 => mapping(uint8 => AmountPair)) public deposits;
@@ -39,8 +43,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public priceRatioShifted;
 
     uint256 public immutable startTimestamp;
+    uint256 public immutable totalVrswAllocated;
     address public immutable token0;
     address public immutable token1;
+    address public immutable vrswToken;
     address public immutable factory;
     address public immutable vsRouter;
     address public immutable vsPair;
@@ -53,9 +59,13 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         address _uniswapOracle,
         address _priceFeed0,
         address _priceFeed1,
-        uint256 _startTimestamp
+        address _vrswToken,
+        uint256 _startTimestamp,
+        uint256 _totalVrswAllocated
     ) vPriceOracle(_token0, _token1, _uniswapOracle, _priceFeed0, _priceFeed1) {
         factory = _factory;
+        vrswToken = _vrswToken;
+        totalVrswAllocated = _totalVrswAllocated;
         token0 = _token0;
         token1 = _token1;
         startTimestamp = _startTimestamp;
@@ -175,6 +185,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         );
         uint256 optimalAmount0;
         uint256 optimalAmount1;
+        uint256 _totalTransferredWeighted;
         AmountPair memory amounts;
         AmountPair memory optimalTotal;
         for (uint256 i = depositsProcessed + 1; i <= upperBound; ++i) {
@@ -189,6 +200,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                     optimalTotal.amount1 += optimalAmount1;
 
                     tokensTransferred0[i][uint8(j)] = optimalAmount0;
+                    _totalTransferredWeighted += j * optimalAmount0;
 
                     // leftovers
                     deposits[i][uint8(j)] = AmountPair(
@@ -216,8 +228,8 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             address(this),
             block.timestamp + 1 minutes
         );
-        // TODO: mint VRSW tokens
         totalTransferred0 += optimalTotal.amount0;
+        totalTransferredWeighted += _totalTransferredWeighted;
         depositsProcessed = upperBound;
         if (upperBound == totalDeposits) {
             totalLpTokens = IERC20(vsPair).balanceOf(address(this));
@@ -234,10 +246,17 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         require(index != 0, 'Nothing to withdraw');
         (
             AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+
         ) = _calculateLeftovers(_to);
+        uint256 vrswAmount = _calculateVrsw(_to);
+
+        leftoversClaimed[_to] = true;
+        vrswClaimed[_to] = true;
+
+        if (vrswAmount > 0) {
+            SafeERC20.safeTransfer(IERC20(vrswToken), _to, vrswAmount);
+        }
         for (uint256 i = 0; i < LOCKING_WEEKS_NUMBER; ++i) {
-            deposits[index][locking_weeks[i]] = AmountPair(0, 0);
             if (amounts[i].amount0 > 0) {
                 SafeERC20.safeTransfer(IERC20(token0), _to, amounts[i].amount0);
             }
@@ -262,7 +281,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         for (uint256 i = 0; i < LOCKING_WEEKS_NUMBER; ++i) {
             if (block.timestamp < _startTimestamp + locking_weeks[i] * 1 weeks)
                 break;
-            tokensTransferred0[index][locking_weeks[i]] = 0;
+            lpTokensWithdrawn[_to][locking_weeks[i]] = true;
             if (amounts[i] > 0) {
                 SafeERC20.safeTransfer(IERC20(vsPair), _to, amounts[i]);
             }
@@ -305,6 +324,16 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         return _calculateLpTokens(_who);
     }
 
+    function viewVrswTokens(
+        address _who
+    ) external view override returns (uint256 amount) {
+        require(
+            currentPhase == Phase.WITHDRAW,
+            'Unable to view leftovers during current phase'
+        );
+        return _calculateVrsw(_who);
+    }
+
     function _calculateOptimalAmounts(
         uint256 _amount0,
         uint256 _amount1
@@ -338,9 +367,12 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
                 assert(outIndex < LOCKING_WEEKS_NUMBER);
-                amounts[outIndex] =
-                    (tokensTransferred0[index][uint8(i)] * _totalLpTokens) /
-                    totalTransferred0;
+                amounts[outIndex] = (
+                    lpTokensWithdrawn[_who][uint8(i)]
+                        ? 0
+                        : (tokensTransferred0[index][uint8(i)] *
+                            _totalLpTokens) / totalTransferred0
+                );
                 locking_weeks[outIndex++] = uint8(i);
             }
         }
@@ -361,9 +393,25 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
                 assert(outIndex < LOCKING_WEEKS_NUMBER);
-                amounts[outIndex] = deposits[index][uint8(i)];
+                amounts[outIndex] = (
+                    leftoversClaimed[_who]
+                        ? AmountPair(0, 0)
+                        : deposits[index][uint8(i)]
+                );
                 locking_weeks[outIndex++] = uint8(i);
             }
         }
+    }
+
+    function _calculateVrsw(address _who) private view returns (uint256) {
+        if (vrswClaimed[_who]) return 0;
+        uint256 index = depositIndexes[_who];
+        uint256 transferredWeighted;
+        for (uint256 i = 1; i < 256; i <<= 1) {
+            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                transferredWeighted += i * tokensTransferred0[index][uint8(i)];
+            }
+        }
+        return transferredWeighted / totalTransferredWeighted;
     }
 }

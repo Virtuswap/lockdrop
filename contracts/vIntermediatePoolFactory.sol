@@ -13,14 +13,16 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
     address public admin;
 
     address public immutable vsRouter;
+    address public immutable vrswToken;
 
     modifier onlyAdmin() {
         require(msg.sender == admin, 'OA');
         _;
     }
 
-    constructor(address _vsRouter) {
+    constructor(address _vsRouter, address _vrswToken) {
         vsRouter = _vsRouter;
+        vrswToken = _vrswToken;
         admin = msg.sender;
     }
 
@@ -37,7 +39,8 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
         address _uniswapOracle,
         address _priceFeed0,
         address _priceFeed1,
-        uint256 _startTimestamp
+        uint256 _startTimestamp,
+        uint256 _totalVrswAllocated
     ) external override returns (address pool) {
         require(_token0 != _token1, 'Identical addresses');
         require(_token0 != address(0), 'Zero address');
@@ -52,7 +55,9 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
                 _uniswapOracle,
                 _priceFeed0,
                 _priceFeed1,
-                _startTimestamp
+                vrswToken,
+                _startTimestamp,
+                _totalVrswAllocated
             )
         );
 
