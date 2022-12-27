@@ -7,18 +7,12 @@ import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import '@openzeppelin/contracts/utils/math/Math.sol';
 import './interfaces/IvIntermediatePool.sol';
+import './interfaces/IvIntermediatePoolFactory.sol';
 import './interfaces/virtuswap/IvRouter.sol';
 import './interfaces/virtuswap/IvPairFactory.sol';
 import './vPriceOracle.sol';
 
 contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
-    enum Phase {
-        CLOSED,
-        DEPOSIT,
-        TRANSFER,
-        WITHDRAW
-    }
-
     uint8 public constant AVAILABLE_LOCKING_WEEKS_MASK = 0xe;
     uint8 public constant LOCKING_WEEKS_NUMBER = 3;
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
@@ -332,6 +326,22 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             'Unable to view leftovers during current phase'
         );
         return _calculateVrsw(_who);
+    }
+
+    function emergencyStop() external override {
+        require(
+            msg.sender == IvIntermediatePoolFactory(factory).admin(),
+            'Admin only'
+        );
+        currentPhase = Phase.CLOSED;
+    }
+
+    function emergencyResume(Phase phase) external override {
+        require(
+            msg.sender == IvIntermediatePoolFactory(factory).admin(),
+            'Admin only'
+        );
+        currentPhase = phase;
     }
 
     function _calculateOptimalAmounts(

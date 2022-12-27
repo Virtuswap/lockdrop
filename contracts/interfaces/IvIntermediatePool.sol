@@ -8,6 +8,13 @@ interface IvIntermediatePool {
         uint256 amount1;
     }
 
+    enum Phase {
+        CLOSED,
+        DEPOSIT,
+        TRANSFER,
+        WITHDRAW
+    }
+
     function triggerDepositPhase() external;
 
     function triggerTransferPhase() external;
@@ -39,4 +46,8 @@ interface IvIntermediatePool {
         returns (uint256[3] memory amount, uint8[3] memory locking_weeks);
 
     function viewVrswTokens(address _who) external view returns (uint256);
+
+    function emergencyStop() external;
+
+    function emergencyResume(Phase phase) external;
 }

@@ -10,7 +10,7 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
     mapping(address => mapping(address => address)) public pools;
     address[] public allPools;
 
-    address public admin;
+    address public override admin;
 
     address public immutable vsRouter;
     address public immutable vrswToken;

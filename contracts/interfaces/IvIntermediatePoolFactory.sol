@@ -3,6 +3,8 @@
 pragma solidity ^0.8.0;
 
 interface IvIntermediatePoolFactory {
+    function admin() external view returns (address);
+
     function getPool(
         address _token0,
         address _token1
