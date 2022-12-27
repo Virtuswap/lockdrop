@@ -41,7 +41,8 @@ describe('vIntermediatePool: Phase 1', function () {
             mockUniswapOracle.address,
             mockV3Aggregator0.address,
             mockV3Aggregator1.address,
-            await time.latest()
+            await time.latest(),
+            100000
         );
         const intermediatePoolAddress = await intermediatePoolFactory.getPool(
             token0.address,
@@ -212,7 +213,8 @@ describe('vIntermediatePool: Phase 2', function () {
             mockUniswapOracle.address,
             mockV3Aggregator0.address,
             mockV3Aggregator1.address,
-            await time.latest()
+            await time.latest(),
+            100000
         );
         const intermediatePoolAddress = await intermediatePoolFactory.getPool(
             token0.address,
@@ -336,7 +338,8 @@ describe('vIntermediatePool: Phase 3', function () {
             mockUniswapOracle.address,
             mockV3Aggregator0.address,
             mockV3Aggregator1.address,
-            await time.latest()
+            await time.latest(),
+            100000
         );
         const intermediatePoolAddress = await intermediatePoolFactory.getPool(
             token0.address,

@@ -39,6 +39,12 @@ const deployMocks: DeployFunction = async function (
             log: true,
             args: [DECIMALS, INITIAL_PRICE_1],
         });
+        const vrswToken = await deploy('MockVrswToken', {
+            contract: 'MockVrswToken',
+            from: deployer,
+            log: true,
+            args: [deployer, INITIAL_TOKEN_AMOUNT],
+        });
         const token0 = await deploy('Token0', {
             contract: 'Token0',
             from: deployer,
