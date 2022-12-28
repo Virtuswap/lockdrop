@@ -524,3 +524,165 @@ describe('vIntermediatePool: Phase 3', function () {
         );
     });
 });
+
+describe('vIntermediatePool: emergency', function () {
+    let intermediatePoolFactory: vIntermediatePoolFactory;
+    let intermediatePool: vIntermediatePool;
+    let mockUniswapOracle: MockUniswapOracle;
+    let mockV3Aggregator0: MockV3Aggregator0;
+    let mockV3Aggregator1: MockV3Aggregator1;
+    let mockVPairFactory: MockVPairFactory;
+    let token0: Token0;
+    let token1: Token1;
+    let vrswToken: MockVrswToken;
+    let deployer: SignerWithAddress;
+    let accounts;
+    let pair;
+
+    before(async () => {
+        accounts = await ethers.getSigners();
+        deployer = accounts[0];
+        await deployments.fixture(['all']);
+        intermediatePoolFactory = await ethers.getContract(
+            'intermediatePoolFactory'
+        );
+        mockVPairFactory = await ethers.getContract('MockVPairFactory');
+        mockUniswapOracle = await ethers.getContract('MockUniswapOracle');
+        mockV3Aggregator0 = await ethers.getContract('MockV3Aggregator0');
+        mockV3Aggregator1 = await ethers.getContract('MockV3Aggregator1');
+        token0 = await ethers.getContract('Token0');
+        token1 = await ethers.getContract('Token1');
+        vrswToken = await ethers.getContract('MockVrswToken');
+        await mockVPairFactory.createPair(token0.address, token1.address);
+        const vrswAllocated = '1000000000000000000000';
+        await intermediatePoolFactory.createPool(
+            token0.address,
+            token1.address,
+            mockUniswapOracle.address,
+            mockV3Aggregator0.address,
+            mockV3Aggregator1.address,
+            await time.latest(),
+            vrswAllocated
+        );
+        const intermediatePoolAddress = await intermediatePoolFactory.getPool(
+            token0.address,
+            token1.address
+        );
+        const factory = await ethers.getContractFactory('vIntermediatePool');
+        intermediatePool = await factory.attach(intermediatePoolAddress);
+
+        pair = (await ethers.getContractFactory('MockVPair')).attach(
+            await mockVPairFactory.getPair(token0.address, token1.address)
+        );
+
+        await vrswToken.mint(intermediatePool.address, vrswAllocated);
+
+        await intermediatePool.triggerDepositPhase();
+        await token0.approve(
+            intermediatePool.address,
+            ethers.utils.parseEther('1000')
+        );
+        await token1.approve(
+            intermediatePool.address,
+            ethers.utils.parseEther('1000')
+        );
+        // Deposit phase
+
+        let amount0 = ethers.utils.parseEther('10');
+        let amount1 = ethers.utils.parseEther('10');
+        // induce leftovers
+        await mockV3Aggregator0.updateAnswer(175000000);
+        for (const account of accounts) {
+            await token0.mint(account.address, ethers.utils.parseEther('1000'));
+            await token1.mint(account.address, ethers.utils.parseEther('1000'));
+            await token0
+                .connect(account)
+                .approve(
+                    intermediatePool.address,
+                    ethers.utils.parseEther('1000')
+                );
+            await token1
+                .connect(account)
+                .approve(
+                    intermediatePool.address,
+                    ethers.utils.parseEther('1000')
+                );
+
+            await intermediatePool
+                .connect(account)
+                .deposit(amount0, amount1, 4);
+        }
+
+        await intermediatePool.deposit(amount0, amount1, 8);
+        await intermediatePool
+            .connect(accounts[2])
+            .deposit(amount0, amount1, 8);
+        await intermediatePool
+            .connect(accounts[1])
+            .deposit(amount0, amount1, 2);
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
+        // final price
+        await mockV3Aggregator0.updateAnswer(200000000);
+        await intermediatePool.triggerTransferPhase();
+        // transfer phase
+        await intermediatePool.transferToRealPool(3);
+    });
+
+    it('Emergency stop can be called only by admin', async () => {
+        expect((await intermediatePool.currentPhase()).toString()).to.not.equal(
+            '4'
+        );
+        await expect(
+            intermediatePool.connect(accounts[1]).emergencyStop()
+        ).to.revertedWith('Admin only');
+    });
+
+    it('Emergency stop works', async () => {
+        expect((await intermediatePool.currentPhase()).toString()).to.not.equal(
+            '4'
+        );
+        await intermediatePool.emergencyStop();
+        expect((await intermediatePool.currentPhase()).toString()).to.equal(
+            '4'
+        );
+    });
+
+    it('Emergency resume can be called only by admin', async () => {
+        expect((await intermediatePool.currentPhase()).toString()).to.equal(
+            '4'
+        );
+        await expect(
+            intermediatePool.connect(accounts[1]).emergencyResume()
+        ).to.revertedWith('Admin only');
+    });
+
+    it('Emergency resume works', async () => {
+        await intermediatePool.emergencyResume('3');
+        expect((await intermediatePool.currentPhase()).toString()).to.equal(
+            '3'
+        );
+    });
+
+    it('EmergencyRescueFunds can be called only by admin', async () => {
+        await intermediatePool.emergencyStop();
+        await expect(
+            intermediatePool.connect(accounts[1]).emergencyRescueFunds()
+        ).to.revertedWith('Admin only');
+    });
+
+    it('EmergencyRescueFunds works', async () => {
+        await intermediatePool.emergencyRescueFunds();
+        const lpTokensAfter = await pair.balanceOf(intermediatePool.address);
+        const vrswTokensAfter = await vrswToken.balanceOf(
+            intermediatePool.address
+        );
+        const token0After = await token0.balanceOf(intermediatePool.address);
+        const token1After = await token1.balanceOf(intermediatePool.address);
+        expect(lpTokensAfter).to.be.equal('0');
+        expect(vrswTokensAfter).to.be.equal('0');
+        expect(token0After).to.be.equal('0');
+        expect(token1After).to.be.equal('0');
+    });
+});
