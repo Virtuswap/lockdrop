@@ -12,7 +12,8 @@ interface IvIntermediatePool {
         CLOSED,
         DEPOSIT,
         TRANSFER,
-        WITHDRAW
+        WITHDRAW,
+        STOPPED
     }
 
     function triggerDepositPhase() external;
@@ -50,4 +51,6 @@ interface IvIntermediatePool {
     function emergencyStop() external;
 
     function emergencyResume(Phase phase) external;
+
+    function emergencyRescueFunds() external;
 }

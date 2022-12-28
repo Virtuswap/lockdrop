@@ -333,7 +333,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             msg.sender == IvIntermediatePoolFactory(factory).admin(),
             'Admin only'
         );
-        currentPhase = Phase.CLOSED;
+        currentPhase = Phase.STOPPED;
     }
 
     function emergencyResume(Phase phase) external override {
@@ -341,7 +341,36 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             msg.sender == IvIntermediatePoolFactory(factory).admin(),
             'Admin only'
         );
+        require(currentPhase == Phase.STOPPED, 'The contract is not stopped');
         currentPhase = phase;
+    }
+
+    function emergencyRescueFunds() external override {
+        require(
+            msg.sender == IvIntermediatePoolFactory(factory).admin(),
+            'Admin only'
+        );
+        require(currentPhase == Phase.STOPPED, 'The contract is not stopped');
+        SafeERC20.safeTransfer(
+            IERC20(token0),
+            msg.sender,
+            IERC20(token0).balanceOf(address(this))
+        );
+        SafeERC20.safeTransfer(
+            IERC20(token1),
+            msg.sender,
+            IERC20(token1).balanceOf(address(this))
+        );
+        SafeERC20.safeTransfer(
+            IERC20(vrswToken),
+            msg.sender,
+            IERC20(vrswToken).balanceOf(address(this))
+        );
+        SafeERC20.safeTransfer(
+            IERC20(vsPair),
+            msg.sender,
+            IERC20(vsPair).balanceOf(address(this))
+        );
     }
 
     function _calculateOptimalAmounts(
