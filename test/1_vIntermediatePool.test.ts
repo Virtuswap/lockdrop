@@ -35,6 +35,8 @@ describe('vIntermediatePool: Phase 1', function () {
         token0 = await ethers.getContract('Token0');
         token1 = await ethers.getContract('Token1');
         await mockVPairFactory.createPair(token0.address, token1.address);
+
+        const vrswAllocated = '1000000000000000000000';
         await intermediatePoolFactory.createPool(
             token0.address,
             token1.address,
@@ -42,7 +44,7 @@ describe('vIntermediatePool: Phase 1', function () {
             mockV3Aggregator0.address,
             mockV3Aggregator1.address,
             await time.latest(),
-            100000
+            vrswAllocated
         );
         const intermediatePoolAddress = await intermediatePoolFactory.getPool(
             token0.address,
@@ -207,6 +209,7 @@ describe('vIntermediatePool: Phase 2', function () {
         token0 = await ethers.getContract('Token0');
         token1 = await ethers.getContract('Token1');
         await mockVPairFactory.createPair(token0.address, token1.address);
+        const vrswAllocated = '1000000000000000000000';
         await intermediatePoolFactory.createPool(
             token0.address,
             token1.address,
@@ -214,7 +217,7 @@ describe('vIntermediatePool: Phase 2', function () {
             mockV3Aggregator0.address,
             mockV3Aggregator1.address,
             await time.latest(),
-            100000
+            vrswAllocated
         );
         const intermediatePoolAddress = await intermediatePoolFactory.getPool(
             token0.address,
@@ -314,6 +317,7 @@ describe('vIntermediatePool: Phase 3', function () {
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
     let token1: Token1;
+    let vrswToken: MockVrswToken;
     let deployer: SignerWithAddress;
     let accounts;
     let pair;
@@ -331,7 +335,9 @@ describe('vIntermediatePool: Phase 3', function () {
         mockV3Aggregator1 = await ethers.getContract('MockV3Aggregator1');
         token0 = await ethers.getContract('Token0');
         token1 = await ethers.getContract('Token1');
+        vrswToken = await ethers.getContract('MockVrswToken');
         await mockVPairFactory.createPair(token0.address, token1.address);
+        const vrswAllocated = '1000000000000000000000';
         await intermediatePoolFactory.createPool(
             token0.address,
             token1.address,
@@ -339,7 +345,7 @@ describe('vIntermediatePool: Phase 3', function () {
             mockV3Aggregator0.address,
             mockV3Aggregator1.address,
             await time.latest(),
-            100000
+            vrswAllocated
         );
         const intermediatePoolAddress = await intermediatePoolFactory.getPool(
             token0.address,
@@ -351,6 +357,8 @@ describe('vIntermediatePool: Phase 3', function () {
         pair = (await ethers.getContractFactory('MockVPair')).attach(
             await mockVPairFactory.getPair(token0.address, token1.address)
         );
+
+        await vrswToken.mint(intermediatePool.address, vrswAllocated);
 
         await intermediatePool.triggerDepositPhase();
         await token0.approve(
@@ -409,11 +417,18 @@ describe('vIntermediatePool: Phase 3', function () {
         const leftoversBefore = (
             await intermediatePool.viewLeftovers(deployer.address)
         ).toString();
+
+        const vrswBefore = await intermediatePool.viewVrswTokens(
+            deployer.address
+        );
         const balanceBefore = await token1.balanceOf(deployer.address);
         await intermediatePool.claimLeftovers(deployer.address);
         const leftoversAfter = (
             await intermediatePool.viewLeftovers(deployer.address)
         ).toString();
+        const vrswAfter = await intermediatePool.viewVrswTokens(
+            deployer.address
+        );
         const balanceAfter = await token1.balanceOf(deployer.address);
         expect(
             leftoversAfter
@@ -428,6 +443,7 @@ describe('vIntermediatePool: Phase 3', function () {
                 .some((item) => item != '0')
         );
         expect(balanceAfter).to.be.above(balanceBefore);
+        expect(vrswAfter).to.be.equal('0');
     });
 
     it('Claim leftovers twice', async () => {
@@ -436,6 +452,7 @@ describe('vIntermediatePool: Phase 3', function () {
         await intermediatePool.claimLeftovers(deployer.address);
         const balanceAfter = await token1.balanceOf(deployer.address);
         expect(balanceAfter).to.be.equal(balanceBefore);
+        expect(balanceAfter).to.be.above(0);
     });
 
     it('Withdraw lp tokens for myself', async () => {
@@ -467,6 +484,15 @@ describe('vIntermediatePool: Phase 3', function () {
         expect(lpTokensAfter3).to.be.above(lpTokensAfter2);
     });
 
+    it('Withdraw lp tokens twice', async () => {
+        await intermediatePool.withdrawLpTokens(deployer.address);
+        const balanceBefore = await token1.balanceOf(deployer.address);
+        await intermediatePool.withdrawLpTokens(deployer.address);
+        const balanceAfter = await token1.balanceOf(deployer.address);
+        expect(balanceAfter).to.be.equal(balanceBefore);
+        expect(balanceAfter).to.be.above('0');
+    });
+
     it('Withdraw all lp tokens tokens', async () => {
         await time.setNextBlockTimestamp(
             (await time.latest()) + 8 * 7 * 24 * 60 * 60
@@ -474,14 +500,27 @@ describe('vIntermediatePool: Phase 3', function () {
         for (const account of accounts) {
             await intermediatePool.withdrawLpTokens(account.address);
         }
-        expect(await pair.balanceOf(intermediatePool.address)).to.be.equal(0);
+        // small leftovers because of rounding
+        expect(await pair.balanceOf(intermediatePool.address)).to.be.below(20);
     });
 
     it('Claim all leftovers', async () => {
+        expect(
+            (await token0.balanceOf(intermediatePool.address)).add(
+                await token1.balanceOf(intermediatePool.address)
+            )
+        ).to.be.above(0);
+        expect(await vrswToken.balanceOf(intermediatePool.address)).to.be.above(
+            0
+        );
         for (const account of accounts) {
             await intermediatePool.claimLeftovers(account.address);
         }
         expect(await token0.balanceOf(intermediatePool.address)).to.be.equal(0);
         expect(await token1.balanceOf(intermediatePool.address)).to.be.equal(0);
+        // small leftovers because of rounding
+        expect(await vrswToken.balanceOf(intermediatePool.address)).to.be.below(
+            20
+        );
     });
 });
