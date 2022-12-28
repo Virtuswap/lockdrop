@@ -451,6 +451,8 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                 transferredWeighted += i * tokensTransferred0[index][uint8(i)];
             }
         }
-        return transferredWeighted / totalTransferredWeighted;
+        return
+            (transferredWeighted * totalVrswAllocated) /
+            totalTransferredWeighted;
     }
 }
