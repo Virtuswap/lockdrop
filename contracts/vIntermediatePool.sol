@@ -116,10 +116,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         );
         require(_amount0 > 0 && _amount1 > 0, 'Insufficient amounts');
 
-        if (
-            block.timestamp - lastPriceFeedTimestamp >= PRICE_UPDATE_FREQ ||
-            lastPriceFeedTimestamp == 0
-        ) {
+        if (block.timestamp - lastPriceFeedTimestamp >= PRICE_UPDATE_FREQ) {
             lastPriceFeedTimestamp = block.timestamp;
             priceRatioShifted = getCurrentPriceRatioShifted();
         }
