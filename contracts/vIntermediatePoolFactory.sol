@@ -3,12 +3,15 @@
 pragma solidity ^0.8.0;
 
 import './vIntermediatePool.sol';
+import './vPriceDiscoveryPool.sol';
 import './interfaces/IvIntermediatePoolFactory.sol';
 import './interfaces/virtuswap/IvPairFactory.sol';
 
 contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
-    mapping(address => mapping(address => address)) public pools;
-    address[] public allPools;
+    mapping(address => mapping(address => address)) public priceDiscoveryPools;
+    mapping(address => mapping(address => address)) public intermediatePools;
+    address[] public allIntermediatePools;
+    address[] public allPriceDiscoveryPools;
 
     address public override admin;
 
@@ -26,14 +29,21 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
         admin = msg.sender;
     }
 
-    function getPool(
+    function getPriceDiscoveryPool(
         address _token0,
         address _token1
     ) external view override returns (address) {
-        return pools[_token0][_token1];
+        return priceDiscoveryPools[_token0][_token1];
     }
 
-    function createPool(
+    function getIntermediatePool(
+        address _token0,
+        address _token1
+    ) external view override returns (address) {
+        return intermediatePools[_token0][_token1];
+    }
+
+    function createIntermediatePool(
         address _token0,
         address _token1,
         address _uniswapOracle,
@@ -44,7 +54,10 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
     ) external override returns (address pool) {
         require(_token0 != _token1, 'Identical addresses');
         require(_token0 != address(0), 'Zero address');
-        require(pools[_token0][_token1] == address(0), 'Pool exists');
+        require(
+            intermediatePools[_token0][_token1] == address(0),
+            'Pool exists'
+        );
 
         pool = address(
             new vIntermediatePool(
@@ -61,9 +74,36 @@ contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
             )
         );
 
-        pools[_token0][_token1] = pool;
-        pools[_token1][_token0] = pool;
-        allPools.push(pool);
+        intermediatePools[_token0][_token1] = pool;
+        intermediatePools[_token1][_token0] = pool;
+        allIntermediatePools.push(pool);
+    }
+
+    function createPriceDiscoveryPool(
+        address _token0,
+        address _token1,
+        uint256 _startTimestamp
+    ) external override returns (address pool) {
+        require(_token0 != _token1, 'Identical addresses');
+        require(_token0 != address(0), 'Zero address');
+        require(
+            priceDiscoveryPools[_token0][_token1] == address(0),
+            'Pool exists'
+        );
+
+        pool = address(
+            new vPriceDiscoveryPool(
+                address(this),
+                _token0,
+                _token1,
+                vsRouter,
+                _startTimestamp
+            )
+        );
+
+        priceDiscoveryPools[_token0][_token1] = pool;
+        priceDiscoveryPools[_token1][_token0] = pool;
+        allPriceDiscoveryPools.push(pool);
     }
 
     function changeAdmin(address _newAdmin) external override onlyAdmin {
