@@ -6,12 +6,12 @@ const deployCore: DeployFunction = async function (
 ) {
     const { deployments } = hre;
     const { deployer } = await getNamedAccounts();
-    const { deploy, log } = deployments;
+    const { deploy } = deployments;
 
     const vsRouter = await deployments.get('MockVRouter');
     const vrswToken = await deployments.get('MockVrswToken');
 
-    const intermediatePoolFactory = await deploy('intermediatePoolFactory', {
+    await deploy('intermediatePoolFactory', {
         from: deployer,
         contract: 'vIntermediatePoolFactory',
         args: [vsRouter.address, vrswToken.address],

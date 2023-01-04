@@ -10,7 +10,7 @@ const deployMocks: DeployFunction = async function (
     hre: HardhatRuntimeEnvironment
 ) {
     const { deployments, getNamedAccounts, network } = hre;
-    const { deploy, log } = deployments;
+    const { deploy } = deployments;
     const { deployer } = await getNamedAccounts();
     const chainId = network.config.chainId;
 
@@ -39,7 +39,7 @@ const deployMocks: DeployFunction = async function (
             log: true,
             args: [DECIMALS, INITIAL_PRICE_1],
         });
-        const vrswToken = await deploy('MockVrswToken', {
+        await deploy('MockVrswToken', {
             contract: 'MockVrswToken',
             from: deployer,
             log: true,

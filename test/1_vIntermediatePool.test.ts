@@ -1,21 +1,25 @@
+import { SignerWithAddress } from '@nomiclabs/hardhat-ethers/signers';
 import { assert, expect } from 'chai';
-import { network, deployments, ethers } from 'hardhat';
+import { deployments, ethers } from 'hardhat';
 import {
-    vIntermediatePool,
-    vIntermediatePoolFactory,
-    MockUniswapOracle,
+    VIntermediatePool,
+    VIntermediatePoolFactory,
+    MockStaticOracle,
     MockVPairFactory,
-    MockV3Aggregator0,
-    mockV3Aggregator1,
-} from '../../typechain-types';
+    MockV3Aggregator,
+    MockVPair,
+    MockVrswToken,
+    Token0,
+    Token1,
+} from '../typechain-types';
 import { time } from '@nomicfoundation/hardhat-network-helpers';
 
 describe('vIntermediatePool: Phase 1', function () {
-    let intermediatePoolFactory: vIntermediatePoolFactory;
-    let intermediatePool: vIntermediatePool;
-    let mockUniswapOracle: MockUniswapOracle;
-    let mockV3Aggregator0: MockV3Aggregator0;
-    let mockV3Aggregator1: MockV3Aggregator1;
+    let intermediatePoolFactory: VIntermediatePoolFactory;
+    let intermediatePool: VIntermediatePool;
+    let mockUniswapOracle: MockStaticOracle;
+    let mockV3Aggregator0: MockV3Aggregator;
+    let mockV3Aggregator1: MockV3Aggregator;
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
     let token1: Token1;
@@ -52,7 +56,9 @@ describe('vIntermediatePool: Phase 1', function () {
                 token1.address
             );
         const factory = await ethers.getContractFactory('vIntermediatePool');
-        intermediatePool = await factory.attach(intermediatePoolAddress);
+        intermediatePool = factory.attach(
+            intermediatePoolAddress
+        ) as VIntermediatePool;
         await intermediatePool.triggerDepositPhase();
         await token0.approve(
             intermediatePool.address,
@@ -73,7 +79,7 @@ describe('vIntermediatePool: Phase 1', function () {
         const tsBefore = (
             await intermediatePool.lastPriceFeedTimestamp()
         ).toString();
-        assert(priceBefore == 0 && tsBefore == 0);
+        assert(priceBefore == '0' && tsBefore == '0');
 
         await intermediatePool.deposit(amount0, amount1, 2);
         const priceAfter = (
@@ -88,9 +94,6 @@ describe('vIntermediatePool: Phase 1', function () {
             (await time.latest()) + 24 * 60 * 60 - 1
         );
         await intermediatePool.deposit(amount0, amount1, 2);
-        const priceAfter2 = (
-            await intermediatePool.priceRatioShifted()
-        ).toString();
         const tsAfter2 = (
             await intermediatePool.lastPriceFeedTimestamp()
         ).toString();
@@ -185,20 +188,18 @@ describe('vIntermediatePool: Phase 1', function () {
 });
 
 describe('vIntermediatePool: Phase 2', function () {
-    let intermediatePoolFactory: vIntermediatePoolFactory;
-    let intermediatePool: vIntermediatePool;
-    let mockUniswapOracle: MockUniswapOracle;
-    let mockV3Aggregator0: MockV3Aggregator0;
-    let mockV3Aggregator1: MockV3Aggregator1;
+    let intermediatePoolFactory: VIntermediatePoolFactory;
+    let intermediatePool: VIntermediatePool;
+    let mockUniswapOracle: MockStaticOracle;
+    let mockV3Aggregator0: MockV3Aggregator;
+    let mockV3Aggregator1: MockV3Aggregator;
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
     let token1: Token1;
-    let deployer: SignerWithAddress;
     let accounts;
 
     beforeEach(async () => {
         accounts = await ethers.getSigners();
-        deployer = accounts[0];
         await deployments.fixture(['all']);
         intermediatePoolFactory = await ethers.getContract(
             'intermediatePoolFactory'
@@ -226,11 +227,9 @@ describe('vIntermediatePool: Phase 2', function () {
                 token1.address
             );
         const factory = await ethers.getContractFactory('vIntermediatePool');
-        intermediatePool = await factory.attach(intermediatePoolAddress);
-
-        const pair = (await ethers.getContractFactory('MockVPair')).attach(
-            await mockVPairFactory.getPair(token0.address, token1.address)
-        );
+        intermediatePool = factory.attach(
+            intermediatePoolAddress
+        ) as VIntermediatePool;
 
         await intermediatePool.triggerDepositPhase();
         await token0.approve(
@@ -311,18 +310,18 @@ describe('vIntermediatePool: Phase 2', function () {
 });
 
 describe('vIntermediatePool: Phase 3', function () {
-    let intermediatePoolFactory: vIntermediatePoolFactory;
-    let intermediatePool: vIntermediatePool;
-    let mockUniswapOracle: MockUniswapOracle;
-    let mockV3Aggregator0: MockV3Aggregator0;
-    let mockV3Aggregator1: MockV3Aggregator1;
+    let intermediatePoolFactory: VIntermediatePoolFactory;
+    let intermediatePool: VIntermediatePool;
+    let mockUniswapOracle: MockStaticOracle;
+    let mockV3Aggregator0: MockV3Aggregator;
+    let mockV3Aggregator1: MockV3Aggregator;
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
     let token1: Token1;
     let vrswToken: MockVrswToken;
     let deployer: SignerWithAddress;
-    let accounts;
-    let pair;
+    let accounts: SignerWithAddress[];
+    let pair: MockVPair;
 
     beforeEach(async () => {
         accounts = await ethers.getSigners();
@@ -355,11 +354,13 @@ describe('vIntermediatePool: Phase 3', function () {
                 token1.address
             );
         const factory = await ethers.getContractFactory('vIntermediatePool');
-        intermediatePool = await factory.attach(intermediatePoolAddress);
+        intermediatePool = factory.attach(
+            intermediatePoolAddress
+        ) as VIntermediatePool;
 
         pair = (await ethers.getContractFactory('MockVPair')).attach(
             await mockVPairFactory.getPair(token0.address, token1.address)
-        );
+        ) as MockVPair;
 
         await vrswToken.mint(intermediatePool.address, vrswAllocated);
 
@@ -421,9 +422,6 @@ describe('vIntermediatePool: Phase 3', function () {
             await intermediatePool.viewLeftovers(deployer.address)
         ).toString();
 
-        const vrswBefore = await intermediatePool.viewVrswTokens(
-            deployer.address
-        );
         const balanceBefore = await token1.balanceOf(deployer.address);
         await intermediatePool.claimLeftovers(deployer.address);
         const leftoversAfter = (
@@ -529,22 +527,20 @@ describe('vIntermediatePool: Phase 3', function () {
 });
 
 describe('vIntermediatePool: emergency', function () {
-    let intermediatePoolFactory: vIntermediatePoolFactory;
-    let intermediatePool: vIntermediatePool;
-    let mockUniswapOracle: MockUniswapOracle;
-    let mockV3Aggregator0: MockV3Aggregator0;
-    let mockV3Aggregator1: MockV3Aggregator1;
+    let intermediatePoolFactory: VIntermediatePoolFactory;
+    let intermediatePool: VIntermediatePool;
+    let mockUniswapOracle: MockStaticOracle;
+    let mockV3Aggregator0: MockV3Aggregator;
+    let mockV3Aggregator1: MockV3Aggregator;
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
     let token1: Token1;
     let vrswToken: MockVrswToken;
-    let deployer: SignerWithAddress;
-    let accounts;
-    let pair;
+    let accounts: SignerWithAddress[];
+    let pair: MockVPair;
 
     before(async () => {
         accounts = await ethers.getSigners();
-        deployer = accounts[0];
         await deployments.fixture(['all']);
         intermediatePoolFactory = await ethers.getContract(
             'intermediatePoolFactory'
@@ -573,11 +569,13 @@ describe('vIntermediatePool: emergency', function () {
                 token1.address
             );
         const factory = await ethers.getContractFactory('vIntermediatePool');
-        intermediatePool = await factory.attach(intermediatePoolAddress);
+        intermediatePool = factory.attach(
+            intermediatePoolAddress
+        ) as VIntermediatePool;
 
         pair = (await ethers.getContractFactory('MockVPair')).attach(
             await mockVPairFactory.getPair(token0.address, token1.address)
-        );
+        ) as MockVPair;
 
         await vrswToken.mint(intermediatePool.address, vrswAllocated);
 
