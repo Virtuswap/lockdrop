@@ -37,7 +37,7 @@ describe('vIntermediatePool: Phase 1', function () {
         await mockVPairFactory.createPair(token0.address, token1.address);
 
         const vrswAllocated = '1000000000000000000000';
-        await intermediatePoolFactory.createPool(
+        await intermediatePoolFactory.createIntermediatePool(
             token0.address,
             token1.address,
             mockUniswapOracle.address,
@@ -46,10 +46,11 @@ describe('vIntermediatePool: Phase 1', function () {
             await time.latest(),
             vrswAllocated
         );
-        const intermediatePoolAddress = await intermediatePoolFactory.getPool(
-            token0.address,
-            token1.address
-        );
+        const intermediatePoolAddress =
+            await intermediatePoolFactory.getIntermediatePool(
+                token0.address,
+                token1.address
+            );
         const factory = await ethers.getContractFactory('vIntermediatePool');
         intermediatePool = await factory.attach(intermediatePoolAddress);
         await intermediatePool.triggerDepositPhase();
@@ -210,7 +211,7 @@ describe('vIntermediatePool: Phase 2', function () {
         token1 = await ethers.getContract('Token1');
         await mockVPairFactory.createPair(token0.address, token1.address);
         const vrswAllocated = '1000000000000000000000';
-        await intermediatePoolFactory.createPool(
+        await intermediatePoolFactory.createIntermediatePool(
             token0.address,
             token1.address,
             mockUniswapOracle.address,
@@ -219,10 +220,11 @@ describe('vIntermediatePool: Phase 2', function () {
             await time.latest(),
             vrswAllocated
         );
-        const intermediatePoolAddress = await intermediatePoolFactory.getPool(
-            token0.address,
-            token1.address
-        );
+        const intermediatePoolAddress =
+            await intermediatePoolFactory.getIntermediatePool(
+                token0.address,
+                token1.address
+            );
         const factory = await ethers.getContractFactory('vIntermediatePool');
         intermediatePool = await factory.attach(intermediatePoolAddress);
 
@@ -338,7 +340,7 @@ describe('vIntermediatePool: Phase 3', function () {
         vrswToken = await ethers.getContract('MockVrswToken');
         await mockVPairFactory.createPair(token0.address, token1.address);
         const vrswAllocated = '1000000000000000000000';
-        await intermediatePoolFactory.createPool(
+        await intermediatePoolFactory.createIntermediatePool(
             token0.address,
             token1.address,
             mockUniswapOracle.address,
@@ -347,10 +349,11 @@ describe('vIntermediatePool: Phase 3', function () {
             await time.latest(),
             vrswAllocated
         );
-        const intermediatePoolAddress = await intermediatePoolFactory.getPool(
-            token0.address,
-            token1.address
-        );
+        const intermediatePoolAddress =
+            await intermediatePoolFactory.getIntermediatePool(
+                token0.address,
+                token1.address
+            );
         const factory = await ethers.getContractFactory('vIntermediatePool');
         intermediatePool = await factory.attach(intermediatePoolAddress);
 
@@ -555,7 +558,7 @@ describe('vIntermediatePool: emergency', function () {
         vrswToken = await ethers.getContract('MockVrswToken');
         await mockVPairFactory.createPair(token0.address, token1.address);
         const vrswAllocated = '1000000000000000000000';
-        await intermediatePoolFactory.createPool(
+        await intermediatePoolFactory.createIntermediatePool(
             token0.address,
             token1.address,
             mockUniswapOracle.address,
@@ -564,10 +567,11 @@ describe('vIntermediatePool: emergency', function () {
             await time.latest(),
             vrswAllocated
         );
-        const intermediatePoolAddress = await intermediatePoolFactory.getPool(
-            token0.address,
-            token1.address
-        );
+        const intermediatePoolAddress =
+            await intermediatePoolFactory.getIntermediatePool(
+                token0.address,
+                token1.address
+            );
         const factory = await ethers.getContractFactory('vIntermediatePool');
         intermediatePool = await factory.attach(intermediatePoolAddress);
 
@@ -654,7 +658,7 @@ describe('vIntermediatePool: emergency', function () {
             '4'
         );
         await expect(
-            intermediatePool.connect(accounts[1]).emergencyResume()
+            intermediatePool.connect(accounts[1]).emergencyResume('2')
         ).to.revertedWith('Admin only');
     });
 
