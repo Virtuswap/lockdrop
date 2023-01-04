@@ -35,7 +35,7 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         await intermediatePoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest(),
+            await time.latest()
         );
         const priceDiscoveryPoolAddress =
             await intermediatePoolFactory.getPriceDiscoveryPool(
@@ -59,16 +59,23 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
 
     it('Deposit works', async () => {
         const amount0 = ethers.utils.parseEther('1');
-        const balanceBefore0 = await token0.balanceOf(priceDiscoveryPool.address);
+        const balanceBefore0 = await token0.balanceOf(
+            priceDiscoveryPool.address
+        );
         await priceDiscoveryPool.deposit(token0.address, amount0);
-        const balanceAfter0 = await token0.balanceOf(priceDiscoveryPool.address);
+        const balanceAfter0 = await token0.balanceOf(
+            priceDiscoveryPool.address
+        );
         const amount1 = ethers.utils.parseEther('5');
-        const balanceBefore1 = await token1.balanceOf(priceDiscoveryPool.address);
+        const balanceBefore1 = await token1.balanceOf(
+            priceDiscoveryPool.address
+        );
         await priceDiscoveryPool.deposit(token1.address, amount1);
-        const balanceAfter1 = await token1.balanceOf(priceDiscoveryPool.address);
+        const balanceAfter1 = await token1.balanceOf(
+            priceDiscoveryPool.address
+        );
         expect(balanceBefore0).to.be.below(balanceAfter0);
         expect(balanceBefore1).to.be.below(balanceAfter1);
-
     });
 
     it('Must revert if amount is zero', async () => {
@@ -107,7 +114,7 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
         await intermediatePoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest(),
+            await time.latest()
         );
         const priceDiscoveryPoolAddress =
             await intermediatePoolFactory.getPriceDiscoveryPool(
@@ -182,7 +189,6 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
     let token1: Token1;
-    let vrswToken: MockVrswToken;
     let deployer: SignerWithAddress;
     let accounts: SignerWithAddress[];
     let pair: MockVPair;
@@ -197,12 +203,11 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
         mockVPairFactory = await ethers.getContract('MockVPairFactory');
         token0 = await ethers.getContract('Token0');
         token1 = await ethers.getContract('Token1');
-        vrswToken = await ethers.getContract('MockVrswToken');
         await mockVPairFactory.createPair(token0.address, token1.address);
         await intermediatePoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest(),
+            await time.latest()
         );
         const priceDiscoveryPoolAddress =
             await intermediatePoolFactory.getPriceDiscoveryPool(
@@ -290,7 +295,9 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
             await priceDiscoveryPool.withdrawLpTokens(account.address);
         }
         // small leftovers because of rounding
-        expect(await pair.balanceOf(priceDiscoveryPool.address)).to.be.below(20);
+        expect(await pair.balanceOf(priceDiscoveryPool.address)).to.be.below(
+            20
+        );
     });
 });
 
@@ -318,7 +325,7 @@ describe('vPriceDiscoveryPool: emergency', function () {
         await intermediatePoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest(),
+            await time.latest()
         );
         const priceDiscoveryPoolAddress =
             await intermediatePoolFactory.getPriceDiscoveryPool(
@@ -382,18 +389,18 @@ describe('vPriceDiscoveryPool: emergency', function () {
     });
 
     it('Emergency stop can be called only by admin', async () => {
-        expect((await priceDiscoveryPool.currentPhase()).toString()).to.not.equal(
-            '4'
-        );
+        expect(
+            (await priceDiscoveryPool.currentPhase()).toString()
+        ).to.not.equal('4');
         await expect(
             priceDiscoveryPool.connect(accounts[1]).emergencyStop()
         ).to.revertedWith('Admin only');
     });
 
     it('Emergency stop works', async () => {
-        expect((await priceDiscoveryPool.currentPhase()).toString()).to.not.equal(
-            '4'
-        );
+        expect(
+            (await priceDiscoveryPool.currentPhase()).toString()
+        ).to.not.equal('4');
         await priceDiscoveryPool.emergencyStop();
         expect((await priceDiscoveryPool.currentPhase()).toString()).to.equal(
             '4'
