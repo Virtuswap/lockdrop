@@ -486,10 +486,13 @@ describe('vIntermediatePool: Phase 3', function () {
     });
 
     it('Withdraw lp tokens twice', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 8 * 7 * 24 * 60 * 60
+        );
         await intermediatePool.withdrawLpTokens(deployer.address);
-        const balanceBefore = await token1.balanceOf(deployer.address);
+        const balanceBefore = await pair.balanceOf(deployer.address);
         await intermediatePool.withdrawLpTokens(deployer.address);
-        const balanceAfter = await token1.balanceOf(deployer.address);
+        const balanceAfter = await pair.balanceOf(deployer.address);
         expect(balanceAfter).to.be.equal(balanceBefore);
         expect(balanceAfter).to.be.above('0');
     });
