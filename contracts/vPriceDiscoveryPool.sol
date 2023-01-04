@@ -126,6 +126,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
             'Unable to withdraw during current phase'
         );
         uint256 lpTokensAmount = _calculateLpTokens(_to);
+        lpTokensWithdrawn[_to] = true;
         if (lpTokensAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vsPair), msg.sender, lpTokensAmount);
         }
