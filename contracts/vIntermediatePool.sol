@@ -13,8 +13,8 @@ import './interfaces/virtuswap/IvPairFactory.sol';
 import './vPriceOracle.sol';
 
 contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
-    uint8 public constant AVAILABLE_LOCKING_WEEKS_MASK = 0xe;
-    uint8 public constant LOCKING_WEEKS_NUMBER = 3;
+    uint256 public constant AVAILABLE_LOCKING_WEEKS_MASK = 0xe;
+    uint256 public constant LOCKING_WEEKS_NUMBER = 3;
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
     uint256 public constant PRICE_UPDATE_FREQ = 1 days;
 
@@ -25,14 +25,14 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public totalLpTokens;
     uint256 public totalTransferred0;
     uint256 public totalTransferredWeightedX10;
-    mapping(address => mapping(uint8 => bool)) public lpTokensWithdrawn;
+    mapping(address => mapping(uint256 => bool)) public lpTokensWithdrawn;
     mapping(address => bool) public leftoversClaimed;
     mapping(address => bool) public vrswClaimed;
     mapping(address => uint256) public depositIndexes;
     mapping(uint256 => address) public indexToAddress;
-    mapping(uint256 => mapping(uint8 => AmountPair)) public deposits;
-    mapping(uint256 => mapping(uint8 => uint256)) public tokensTransferred0;
-    mapping(uint8 => uint256) public lockMultiplierX10;
+    mapping(uint256 => mapping(uint256 => AmountPair)) public deposits;
+    mapping(uint256 => mapping(uint256 => uint256)) public tokensTransferred0;
+    mapping(uint256 => uint256) public lockMultiplierX10;
 
     uint256 public lastPriceFeedTimestamp;
     uint256 public priceRatioShifted;
@@ -108,7 +108,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     function deposit(
         uint256 _amount0,
         uint256 _amount1,
-        uint8 _locking_weeks
+        uint256 _locking_weeks
     ) external override {
         require(
             currentPhase == Phase.DEPOSIT,
@@ -184,7 +184,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         for (uint256 i = depositsProcessed + 1; i <= upperBound; ++i) {
             for (uint256 j = 1; j < 256; j <<= 1) {
                 if (AVAILABLE_LOCKING_WEEKS_MASK & j != 0) {
-                    amounts = deposits[i][uint8(j)];
+                    amounts = deposits[i][j];
                     (optimalAmount0, optimalAmount1) = _calculateOptimalAmounts(
                         amounts.amount0,
                         amounts.amount1
@@ -192,13 +192,13 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                     optimalTotal.amount0 += optimalAmount0;
                     optimalTotal.amount1 += optimalAmount1;
 
-                    tokensTransferred0[i][uint8(j)] = optimalAmount0;
+                    tokensTransferred0[i][j] = optimalAmount0;
                     _totalTransferredWeightedX10 +=
-                        lockMultiplierX10[uint8(j)] *
+                        lockMultiplierX10[j] *
                         optimalAmount0;
 
                     // leftovers
-                    deposits[i][uint8(j)] = AmountPair(
+                    deposits[i][j] = AmountPair(
                         amounts.amount0 - optimalAmount0,
                         amounts.amount1 - optimalAmount1
                     );
@@ -271,7 +271,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 _startTimestamp = startTimestamp;
         (
             uint256[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
         ) = _calculateLpTokens(_to);
         for (uint256 i = 0; i < LOCKING_WEEKS_NUMBER; ++i) {
             if (block.timestamp < _startTimestamp + locking_weeks[i] * 1 weeks)
@@ -291,7 +291,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         override
         returns (
             AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
         )
     {
         require(
@@ -309,7 +309,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         override
         returns (
             uint256[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
         )
     {
         require(
@@ -398,7 +398,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         view
         returns (
             uint256[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
         )
     {
         uint256 index = depositIndexes[_who];
@@ -408,12 +408,12 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
                 assert(outIndex < LOCKING_WEEKS_NUMBER);
                 amounts[outIndex] = (
-                    lpTokensWithdrawn[_who][uint8(i)]
+                    lpTokensWithdrawn[_who][i]
                         ? 0
-                        : (tokensTransferred0[index][uint8(i)] *
-                            _totalLpTokens) / totalTransferred0
+                        : (tokensTransferred0[index][i] * _totalLpTokens) /
+                            totalTransferred0
                 );
-                locking_weeks[outIndex++] = uint8(i);
+                locking_weeks[outIndex++] = i;
             }
         }
     }
@@ -425,7 +425,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         view
         returns (
             AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint8[LOCKING_WEEKS_NUMBER] memory locking_weeks
+            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
         )
     {
         uint256 index = depositIndexes[_who];
@@ -436,9 +436,9 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                 amounts[outIndex] = (
                     leftoversClaimed[_who]
                         ? AmountPair(0, 0)
-                        : deposits[index][uint8(i)]
+                        : deposits[index][i]
                 );
-                locking_weeks[outIndex++] = uint8(i);
+                locking_weeks[outIndex++] = i;
             }
         }
     }
@@ -450,8 +450,8 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
                 transferredWeightedX10 +=
-                    lockMultiplierX10[uint8(i)] *
-                    tokensTransferred0[index][uint8(i)];
+                    lockMultiplierX10[i] *
+                    tokensTransferred0[index][i];
             }
         }
         return

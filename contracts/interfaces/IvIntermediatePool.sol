@@ -23,7 +23,7 @@ interface IvIntermediatePool {
     function deposit(
         uint256 _amount0,
         uint256 _amount1,
-        uint8 _locking_period
+        uint256 _locking_period
     ) external;
 
     function transferToRealPool(uint256 _transfersNumber) external;
@@ -37,14 +37,14 @@ interface IvIntermediatePool {
     )
         external
         view
-        returns (AmountPair[3] memory amounts, uint8[3] memory locking_weeks);
+        returns (AmountPair[3] memory amounts, uint256[3] memory locking_weeks);
 
     function viewLpTokens(
         address _who
     )
         external
         view
-        returns (uint256[3] memory amount, uint8[3] memory locking_weeks);
+        returns (uint256[3] memory amount, uint256[3] memory locking_weeks);
 
     function viewVrswTokens(address _who) external view returns (uint256);
 
