@@ -25,9 +25,6 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public totalLpTokens;
     uint256 public totalTransferred0;
     uint256 public totalTransferredWeightedX10;
-    mapping(address => mapping(uint256 => bool)) public lpTokensWithdrawn;
-    mapping(address => bool) public leftoversClaimed;
-    mapping(address => bool) public vrswClaimed;
     mapping(address => uint256) public depositIndexes;
     mapping(uint256 => address) public indexToAddress;
     mapping(uint256 => mapping(uint256 => AmountPair)) public deposits;
@@ -237,27 +234,18 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             currentPhase == Phase.WITHDRAW,
             'Unable to withdraw during current phase'
         );
-        uint256 index = depositIndexes[_to];
-        require(index != 0, 'Nothing to withdraw');
-        (
-            AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
 
-        ) = _calculateLeftovers(_to);
+        AmountPair memory amounts = _calculateLeftovers(_to);
         uint256 vrswAmount = _calculateVrsw(_to);
-
-        leftoversClaimed[_to] = true;
-        vrswClaimed[_to] = true;
 
         if (vrswAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vrswToken), _to, vrswAmount);
         }
-        for (uint256 i = 0; i < LOCKING_WEEKS_NUMBER; ++i) {
-            if (amounts[i].amount0 > 0) {
-                SafeERC20.safeTransfer(IERC20(token0), _to, amounts[i].amount0);
-            }
-            if (amounts[i].amount1 > 0) {
-                SafeERC20.safeTransfer(IERC20(token1), _to, amounts[i].amount1);
-            }
+        if (amounts.amount0 > 0) {
+            SafeERC20.safeTransfer(IERC20(token0), _to, amounts.amount0);
+        }
+        if (amounts.amount1 > 0) {
+            SafeERC20.safeTransfer(IERC20(token1), _to, amounts.amount1);
         }
     }
 
@@ -266,17 +254,13 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             currentPhase == Phase.WITHDRAW,
             'Unable to withdraw during current phase'
         );
-        uint256 index = depositIndexes[_to];
-        require(index != 0, 'Nothing to claim');
-        uint256 _startTimestamp = startTimestamp;
         (
             uint256[LOCKING_WEEKS_NUMBER] memory amounts,
             uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
         ) = _calculateLpTokens(_to);
         for (uint256 i = 0; i < LOCKING_WEEKS_NUMBER; ++i) {
-            if (block.timestamp < _startTimestamp + locking_weeks[i] * 1 weeks)
+            if (block.timestamp < startTimestamp + locking_weeks[i] * 1 weeks)
                 break;
-            lpTokensWithdrawn[_to][locking_weeks[i]] = true;
             if (amounts[i] > 0) {
                 SafeERC20.safeTransfer(IERC20(vsPair), _to, amounts[i]);
             }
@@ -285,15 +269,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
 
     function viewLeftovers(
         address _who
-    )
-        external
-        view
-        override
-        returns (
-            AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
-        )
-    {
+    ) external view override returns (AmountPair memory amounts) {
         require(
             currentPhase == Phase.WITHDRAW,
             'Unable to view leftovers during current phase'
@@ -407,12 +383,9 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
                 assert(outIndex < LOCKING_WEEKS_NUMBER);
-                amounts[outIndex] = (
-                    lpTokensWithdrawn[_who][i]
-                        ? 0
-                        : (tokensTransferred0[index][i] * _totalLpTokens) /
-                            totalTransferred0
-                );
+                amounts[outIndex] =
+                    (tokensTransferred0[index][i] * _totalLpTokens) /
+                    totalTransferred0;
                 locking_weeks[outIndex++] = i;
             }
         }
@@ -420,31 +393,17 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
 
     function _calculateLeftovers(
         address _who
-    )
-        private
-        view
-        returns (
-            AmountPair[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
-        )
-    {
+    ) private view returns (AmountPair memory amounts) {
         uint256 index = depositIndexes[_who];
-        uint256 outIndex;
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                assert(outIndex < LOCKING_WEEKS_NUMBER);
-                amounts[outIndex] = (
-                    leftoversClaimed[_who]
-                        ? AmountPair(0, 0)
-                        : deposits[index][i]
-                );
-                locking_weeks[outIndex++] = i;
+                amounts.amount0 += deposits[index][i].amount0;
+                amounts.amount1 += deposits[index][i].amount1;
             }
         }
     }
 
     function _calculateVrsw(address _who) private view returns (uint256) {
-        if (vrswClaimed[_who]) return 0;
         uint256 index = depositIndexes[_who];
         uint256 transferredWeightedX10;
         for (uint256 i = 1; i < 256; i <<= 1) {

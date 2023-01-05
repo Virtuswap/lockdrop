@@ -34,10 +34,7 @@ interface IvIntermediatePool {
 
     function viewLeftovers(
         address _who
-    )
-        external
-        view
-        returns (AmountPair[3] memory amounts, uint256[3] memory locking_weeks);
+    ) external view returns (AmountPair memory amounts);
 
     function viewLpTokens(
         address _who
