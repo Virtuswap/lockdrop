@@ -24,7 +24,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public depositsProcessed;
     uint256 public totalLpTokens;
     uint256 public totalTransferred0;
-    uint256 public totalTransferredWeighted;
+    uint256 public totalTransferredWeightedX10;
     mapping(address => mapping(uint8 => bool)) public lpTokensWithdrawn;
     mapping(address => bool) public leftoversClaimed;
     mapping(address => bool) public vrswClaimed;
@@ -32,6 +32,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     mapping(uint256 => address) public indexToAddress;
     mapping(uint256 => mapping(uint8 => AmountPair)) public deposits;
     mapping(uint256 => mapping(uint8 => uint256)) public tokensTransferred0;
+    mapping(uint8 => uint256) public lockMultiplierX10;
 
     uint256 public lastPriceFeedTimestamp;
     uint256 public priceRatioShifted;
@@ -76,6 +77,9 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             "VSPair with these tokens doesn't exist"
         );
         vsPair = _vsPair;
+        lockMultiplierX10[2] = 10;
+        lockMultiplierX10[4] = 22;
+        lockMultiplierX10[8] = 44;
     }
 
     function triggerDepositPhase() external override {
@@ -161,8 +165,6 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         );
     }
 
-    // TODO: add migration logic
-
     function transferToRealPool(uint256 _transfersNumber) external override {
         require(
             currentPhase == Phase.TRANSFER,
@@ -176,7 +178,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         );
         uint256 optimalAmount0;
         uint256 optimalAmount1;
-        uint256 _totalTransferredWeighted;
+        uint256 _totalTransferredWeightedX10;
         AmountPair memory amounts;
         AmountPair memory optimalTotal;
         for (uint256 i = depositsProcessed + 1; i <= upperBound; ++i) {
@@ -191,7 +193,9 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                     optimalTotal.amount1 += optimalAmount1;
 
                     tokensTransferred0[i][uint8(j)] = optimalAmount0;
-                    _totalTransferredWeighted += j * optimalAmount0;
+                    _totalTransferredWeightedX10 +=
+                        lockMultiplierX10[uint8(j)] *
+                        optimalAmount0;
 
                     // leftovers
                     deposits[i][uint8(j)] = AmountPair(
@@ -220,7 +224,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             block.timestamp + 1 minutes
         );
         totalTransferred0 += optimalTotal.amount0;
-        totalTransferredWeighted += _totalTransferredWeighted;
+        totalTransferredWeightedX10 += _totalTransferredWeightedX10;
         depositsProcessed = upperBound;
         if (upperBound == totalDeposits) {
             totalLpTokens = IERC20(vsPair).balanceOf(address(this));
@@ -442,14 +446,16 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     function _calculateVrsw(address _who) private view returns (uint256) {
         if (vrswClaimed[_who]) return 0;
         uint256 index = depositIndexes[_who];
-        uint256 transferredWeighted;
+        uint256 transferredWeightedX10;
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                transferredWeighted += i * tokensTransferred0[index][uint8(i)];
+                transferredWeightedX10 +=
+                    lockMultiplierX10[uint8(i)] *
+                    tokensTransferred0[index][uint8(i)];
             }
         }
         return
-            (transferredWeighted * totalVrswAllocated) /
-            totalTransferredWeighted;
+            (transferredWeightedX10 * totalVrswAllocated) /
+            totalTransferredWeightedX10;
     }
 }
