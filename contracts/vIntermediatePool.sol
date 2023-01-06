@@ -78,10 +78,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                 _token1
             )
         );
-        require(
-            _vsPair != address(0),
-            "VSPair with these tokens doesn't exist"
-        );
+        require(_vsPair != address(0), 'VSPair not found');
         vsPair = _vsPair;
         lockMultiplierX10[2] = 10;
         lockMultiplierX10[4] = 22;
@@ -90,10 +87,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
 
     function triggerDepositPhase() external override {
         require(block.timestamp >= startTimestamp, 'Too early');
-        require(
-            currentPhase == Phase.CLOSED,
-            "Couldn't trigger from the current phase"
-        );
+        require(currentPhase == Phase.CLOSED, 'Wrong phase');
         currentPhase = Phase.DEPOSIT;
     }
 
@@ -102,10 +96,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             block.timestamp >= startTimestamp + DEPOSIT_PHASE_DURATION,
             'Too early'
         );
-        require(
-            currentPhase == Phase.DEPOSIT,
-            "Couldn't trigger from the current phase"
-        );
+        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         currentPhase = Phase.TRANSFER;
         lastPriceFeedTimestamp = block.timestamp;
         priceRatioShifted = getCurrentPriceRatioShifted();
@@ -114,14 +105,11 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     function deposit(
         uint256 _amount0,
         uint256 _amount1,
-        uint256 _locking_weeks
+        uint256 _lockingWeeks
     ) external override {
+        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         require(
-            currentPhase == Phase.DEPOSIT,
-            'Unable to deposit during current phase'
-        );
-        require(
-            _locking_weeks & AVAILABLE_LOCKING_WEEKS_MASK != 0,
+            _lockingWeeks & AVAILABLE_LOCKING_WEEKS_MASK != 0,
             'Invalid locking period'
         );
         require(_amount0 > 0 && _amount1 > 0, 'Insufficient amounts');
@@ -145,10 +133,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             1 days;
         uint256 index = depositIndexes[msg.sender];
         if (index != 0) {
-            AmountPair memory prevDeposit = deposits[index][_locking_weeks][
+            AmountPair memory prevDeposit = deposits[index][_lockingWeeks][
                 currentLockdropDay
             ];
-            deposits[index][_locking_weeks][currentLockdropDay] = AmountPair(
+            deposits[index][_lockingWeeks][currentLockdropDay] = AmountPair(
                 prevDeposit.amount0 + optimalAmount0,
                 prevDeposit.amount1 + optimalAmount1
             );
@@ -156,7 +144,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             index = ++totalDeposits;
             depositIndexes[msg.sender] = index;
             indexToAddress[index] = msg.sender;
-            deposits[index][_locking_weeks][currentLockdropDay] = AmountPair(
+            deposits[index][_lockingWeeks][currentLockdropDay] = AmountPair(
                 optimalAmount0,
                 optimalAmount1
             );
@@ -179,10 +167,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 _lockingWeeks,
         uint256 _depositDay
     ) external override {
-        require(
-            currentPhase == Phase.DEPOSIT,
-            'Unable to withdraw with penalty during current phase'
-        );
+        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         require(
             _lockingWeeks & AVAILABLE_LOCKING_WEEKS_MASK != 0,
             'Invalid locking period'
@@ -229,11 +214,8 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     }
 
     function transferToRealPool(uint256 _transfersNumber) external override {
-        require(
-            currentPhase == Phase.TRANSFER,
-            'Unable to transfer during current phase'
-        );
-        require(_transfersNumber > 0, 'Transfers number must be positive');
+        require(currentPhase == Phase.TRANSFER, 'Wrong phase');
+        require(_transfersNumber > 0, 'The parameter must be positive');
 
         uint256 upperBound = Math.min(
             depositsProcessed + _transfersNumber,
@@ -311,10 +293,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     }
 
     function claimLeftovers(address _to) external override {
-        require(
-            currentPhase == Phase.WITHDRAW,
-            'Unable to withdraw during current phase'
-        );
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
 
         AmountPair memory amounts = leftoversClaimed[_to]
             ? AmountPair(0, 0)
@@ -337,24 +316,21 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
 
     function withdrawLpTokens(
         address _to,
-        uint256 _locking_weeks
+        uint256 _lockingWeeks
     ) external override {
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
         require(
-            currentPhase == Phase.WITHDRAW,
-            'Unable to withdraw during current phase'
-        );
-        require(
-            _locking_weeks & AVAILABLE_LOCKING_WEEKS_MASK != 0,
+            _lockingWeeks & AVAILABLE_LOCKING_WEEKS_MASK != 0,
             'Invalid locking period'
         );
         require(
-            block.timestamp > startTimestamp + _locking_weeks * 1 weeks,
+            block.timestamp > startTimestamp + _lockingWeeks * 1 weeks,
             'Too early'
         );
-        uint256 lpAmount = lpTokensWithdrawn[_to][_locking_weeks]
+        uint256 lpAmount = lpTokensWithdrawn[_to][_lockingWeeks]
             ? 0
-            : _calculateLpTokens(_to, _locking_weeks);
-        lpTokensWithdrawn[_to][_locking_weeks] = true;
+            : _calculateLpTokens(_to, _lockingWeeks);
+        lpTokensWithdrawn[_to][_lockingWeeks] = true;
         if (lpAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vsPair), _to, lpAmount);
         }
@@ -363,10 +339,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     function viewLeftovers(
         address _who
     ) external view override returns (AmountPair memory amounts) {
-        require(
-            currentPhase == Phase.WITHDRAW,
-            'Unable to view leftovers during current phase'
-        );
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
         amounts = leftoversClaimed[_who]
             ? AmountPair(0, 0)
             : _calculateLeftovers(_who);
@@ -380,20 +353,17 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         override
         returns (
             uint256[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
+            uint256[LOCKING_WEEKS_NUMBER] memory lockingWeeks
         )
     {
-        require(
-            currentPhase == Phase.WITHDRAW,
-            'Unable to view leftovers during current phase'
-        );
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
         uint256 outIndex;
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
                 amounts[outIndex] = lpTokensWithdrawn[_who][i]
                     ? 0
                     : _calculateLpTokens(_who, i);
-                locking_weeks[outIndex++] = i;
+                lockingWeeks[outIndex++] = i;
             }
         }
     }
@@ -401,10 +371,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     function viewVrswTokens(
         address _who
     ) external view override returns (uint256 amount) {
-        require(
-            currentPhase == Phase.WITHDRAW,
-            'Unable to view leftovers during current phase'
-        );
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
         amount = vrswClaimed[_who] ? 0 : _calculateVrsw(_who);
     }
 
@@ -472,11 +439,11 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
 
     function _calculateLpTokens(
         address _who,
-        uint256 _locking_weeks
+        uint256 _lockingWeeks
     ) private view returns (uint256 amount) {
         uint256 index = depositIndexes[_who];
         for (uint256 j = 0; j < LOCKDROP_DURATION_DAYS; ++j) {
-            amount += tokensTransferred0[index][_locking_weeks][j];
+            amount += tokensTransferred0[index][_lockingWeeks][j];
         }
         amount = (amount * totalLpTokens) / totalTransferred0;
     }

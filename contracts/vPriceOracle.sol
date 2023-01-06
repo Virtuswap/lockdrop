@@ -24,7 +24,7 @@ abstract contract vPriceOracle is vChainlinkPriceOracle, vUniswapPriceOracle {
         } else if (_priceFeed0 != address(0) && _priceFeed1 != address(0)) {
             isUniswapOracle = false;
         } else {
-            revert('No oracle is available for the tokens');
+            revert('No oracle is available');
         }
     }
 

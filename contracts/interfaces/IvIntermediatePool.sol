@@ -23,7 +23,7 @@ interface IvIntermediatePool {
     function deposit(
         uint256 _amount0,
         uint256 _amount1,
-        uint256 _locking_period
+        uint256 _lockingPeriod
     ) external;
 
     function withdrawWithPenalty(
@@ -35,7 +35,7 @@ interface IvIntermediatePool {
 
     function claimLeftovers(address _to) external;
 
-    function withdrawLpTokens(address _to, uint256 _locking_weeks) external;
+    function withdrawLpTokens(address _to, uint256 _lockingWeeks) external;
 
     function viewLeftovers(
         address _who
@@ -46,7 +46,7 @@ interface IvIntermediatePool {
     )
         external
         view
-        returns (uint256[3] memory amount, uint256[3] memory locking_weeks);
+        returns (uint256[3] memory amount, uint256[3] memory lockingWeeks);
 
     function viewVrswTokens(address _who) external view returns (uint256);
 

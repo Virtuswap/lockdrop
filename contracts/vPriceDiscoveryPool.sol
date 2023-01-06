@@ -50,19 +50,13 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
                 _token1
             )
         );
-        require(
-            _vsPair != address(0),
-            "VSPair with these tokens doesn't exist"
-        );
+        require(_vsPair != address(0), 'VSPair not found');
         vsPair = _vsPair;
     }
 
     function triggerDepositPhase() external override {
         require(block.timestamp >= startTimestamp, 'Too early');
-        require(
-            currentPhase == Phase.CLOSED,
-            "Couldn't trigger from the current phase"
-        );
+        require(currentPhase == Phase.CLOSED, 'Wrong phase');
         currentPhase = Phase.DEPOSIT;
     }
 
@@ -71,18 +65,12 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
             block.timestamp >= startTimestamp + DEPOSIT_PHASE_DURATION,
             'Too early'
         );
-        require(
-            currentPhase == Phase.DEPOSIT,
-            "Couldn't trigger from the current phase"
-        );
+        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         currentPhase = Phase.TRANSFER;
     }
 
     function deposit(address _token, uint256 _amount) external override {
-        require(
-            currentPhase == Phase.DEPOSIT,
-            'Unable to deposit during current phase'
-        );
+        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         require(_token == token0 || _token == token1, 'Invalid token');
         require(_amount > 0, 'Insufficient amount');
 
@@ -102,10 +90,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         address _token,
         uint256 _amount
     ) external override {
-        require(
-            currentPhase == Phase.DEPOSIT,
-            'Unable to deposit during current phase'
-        );
+        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         require(_token == token0 || _token == token1, 'Invalid token');
         require(_amount > 0, 'Insufficient amount');
         require(
@@ -132,10 +117,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     }
 
     function transferToRealPool() external override {
-        require(
-            currentPhase == Phase.TRANSFER,
-            'Unable to transfer during current phase'
-        );
+        require(currentPhase == Phase.TRANSFER, 'Wrong phase');
 
         totalTransferred0 = IERC20(token0).balanceOf(address(this));
         totalTransferred1 = IERC20(token1).balanceOf(address(this));
@@ -156,10 +138,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     }
 
     function withdrawLpTokens(address _to) external override {
-        require(
-            currentPhase == Phase.WITHDRAW,
-            'Unable to withdraw during current phase'
-        );
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
         uint256 lpTokensAmount = lpTokensWithdrawn[_to]
             ? 0
             : _calculateLpTokens(_to);
@@ -172,10 +151,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     function viewLpTokens(
         address _who
     ) external view override returns (uint256) {
-        require(
-            currentPhase == Phase.WITHDRAW,
-            'Unable to view leftovers during current phase'
-        );
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
         return _calculateLpTokens(_who);
     }
 

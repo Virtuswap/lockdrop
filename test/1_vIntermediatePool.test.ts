@@ -304,7 +304,7 @@ describe('vIntermediatePool: Phase 2', function () {
 
     it('Must revert if transfers amount is zero', async () => {
         await expect(intermediatePool.transferToRealPool(0)).to.revertedWith(
-            'Transfers number must be positive'
+            'The parameter must be positive'
         );
     });
 });
