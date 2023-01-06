@@ -26,6 +26,11 @@ interface IvIntermediatePool {
         uint256 _locking_period
     ) external;
 
+    function withdrawWithPenalty(
+        uint256 _lockingWeeks,
+        uint256 _depositDay
+    ) external;
+
     function transferToRealPool(uint256 _transfersNumber) external;
 
     function claimLeftovers(address _to) external;

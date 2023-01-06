@@ -18,9 +18,11 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
     uint256 public constant LOCKDROP_DURATION_DAYS = 7;
     uint256 public constant PRICE_UPDATE_FREQ = 1 days;
+    uint256 public constant WITHDRAW_PENALTY = 2;
 
     Phase public currentPhase;
 
+    AmountPair public penalties;
     uint256 public totalDeposits;
     uint256 public depositsProcessed;
     uint256 public totalLpTokens;
@@ -171,6 +173,59 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             address(this),
             optimalAmount1
         );
+    }
+
+    function withdrawWithPenalty(
+        uint256 _lockingWeeks,
+        uint256 _depositDay
+    ) external override {
+        require(
+            currentPhase == Phase.DEPOSIT,
+            'Unable to withdraw with penalty during current phase'
+        );
+        require(
+            _lockingWeeks & AVAILABLE_LOCKING_WEEKS_MASK != 0,
+            'Invalid locking period'
+        );
+        uint256 currentLockdropDay = (block.timestamp - startTimestamp) /
+            1 days;
+        require(
+            _depositDay > 0 && _depositDay <= currentLockdropDay + 1,
+            'Invalid deposit day'
+        );
+
+        uint256 index = depositIndexes[msg.sender];
+        AmountPair memory amounts = deposits[index][_lockingWeeks][_depositDay];
+        AmountPair memory _penalty = AmountPair(
+            (amounts.amount0 * WITHDRAW_PENALTY) / 100,
+            (amounts.amount1 * WITHDRAW_PENALTY) / 100
+        );
+        AmountPair memory prevPenalties = penalties;
+        AmountPair memory withdrawAmounts = AmountPair(
+            amounts.amount0 - _penalty.amount0,
+            amounts.amount1 - _penalty.amount1
+        );
+
+        deposits[index][_lockingWeeks][_depositDay] = AmountPair(0, 0);
+        penalties = AmountPair(
+            prevPenalties.amount0 + _penalty.amount0,
+            prevPenalties.amount1 + _penalty.amount1
+        );
+
+        if (withdrawAmounts.amount0 > 0) {
+            SafeERC20.safeTransfer(
+                IERC20(token0),
+                msg.sender,
+                withdrawAmounts.amount0
+            );
+        }
+        if (withdrawAmounts.amount1 > 0) {
+            SafeERC20.safeTransfer(
+                IERC20(token1),
+                msg.sender,
+                withdrawAmounts.amount1
+            );
+        }
     }
 
     function transferToRealPool(uint256 _transfersNumber) external override {
