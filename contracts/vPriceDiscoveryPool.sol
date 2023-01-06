@@ -12,12 +12,14 @@ import './interfaces/virtuswap/IvPairFactory.sol';
 
 contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     uint256 public constant DEPOSIT_PHASE_DURATION = 5 days;
+    uint256 public constant WITHDRAW_PENALTY = 2;
 
     Phase public currentPhase;
 
     uint256 public totalTransferred0;
     uint256 public totalTransferred1;
     uint256 public totalLpTokens;
+    uint256 public penalties;
     mapping(address => bool) public lpTokensWithdrawn;
     mapping(address => uint256) public deposits0;
     mapping(address => uint256) public deposits1;
@@ -94,6 +96,39 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
             address(this),
             _amount
         );
+    }
+
+    function withdrawWithPenalty(
+        address _token,
+        uint256 _amount
+    ) external override {
+        require(
+            currentPhase == Phase.DEPOSIT,
+            'Unable to deposit during current phase'
+        );
+        require(_token == token0 || _token == token1, 'Invalid token');
+        require(_amount > 0, 'Insufficient amount');
+        require(
+            _amount <=
+                (
+                    _token == token0
+                        ? deposits0[msg.sender]
+                        : deposits1[msg.sender]
+                ),
+            'Not enough tokens'
+        );
+
+        uint256 penalty = (_amount * WITHDRAW_PENALTY) / 100;
+        uint256 amountOut = _amount - penalty;
+
+        _token == token0
+            ? deposits0[msg.sender] -= _amount
+            : deposits1[msg.sender] -= _amount;
+        penalties += penalty;
+
+        if (amountOut > 0) {
+            SafeERC20.safeTransfer(IERC20(_token), msg.sender, amountOut);
+        }
     }
 
     function transferToRealPool() external override {

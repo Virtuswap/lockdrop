@@ -17,6 +17,8 @@ interface IvPriceDiscoveryPool {
 
     function deposit(address _token, uint256 _amount) external;
 
+    function withdrawWithPenalty(address _token, uint256 _amount) external;
+
     function transferToRealPool() external;
 
     function withdrawLpTokens(address _to) external;
