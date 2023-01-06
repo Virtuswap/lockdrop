@@ -125,7 +125,9 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
             currentPhase == Phase.WITHDRAW,
             'Unable to withdraw during current phase'
         );
-        uint256 lpTokensAmount = _calculateLpTokens(_to);
+        uint256 lpTokensAmount = lpTokensWithdrawn[_to]
+            ? 0
+            : _calculateLpTokens(_to);
         lpTokensWithdrawn[_to] = true;
         if (lpTokensAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vsPair), msg.sender, lpTokensAmount);
@@ -185,7 +187,6 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     function _calculateLpTokens(
         address _who
     ) private view returns (uint256 lpTokensAmount) {
-        if (lpTokensWithdrawn[_who]) return 0;
         uint256 _totalTransferred0 = totalTransferred0;
         uint256 _totalTransferred1 = totalTransferred1;
         lpTokensAmount =
