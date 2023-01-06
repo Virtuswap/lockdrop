@@ -30,7 +30,7 @@ interface IvIntermediatePool {
 
     function claimLeftovers(address _to) external;
 
-    function withdrawLpTokens(address _to) external;
+    function withdrawLpTokens(address _to, uint256 _locking_weeks) external;
 
     function viewLeftovers(
         address _who

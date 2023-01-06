@@ -16,6 +16,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public constant AVAILABLE_LOCKING_WEEKS_MASK = 0xe;
     uint256 public constant LOCKING_WEEKS_NUMBER = 3;
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
+    uint256 public constant LOCKDROP_DURATION_DAYS = 7;
     uint256 public constant PRICE_UPDATE_FREQ = 1 days;
 
     Phase public currentPhase;
@@ -25,10 +26,16 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public totalLpTokens;
     uint256 public totalTransferred0;
     uint256 public totalTransferredWeightedX10;
+    uint256 public totalTransferredWithBonusX10000;
+    mapping(address => mapping(uint256 => bool)) public lpTokensWithdrawn;
+    mapping(address => bool) public leftoversClaimed;
+    mapping(address => bool) public vrswClaimed;
     mapping(address => uint256) public depositIndexes;
     mapping(uint256 => address) public indexToAddress;
-    mapping(uint256 => mapping(uint256 => AmountPair)) public deposits;
-    mapping(uint256 => mapping(uint256 => uint256)) public tokensTransferred0;
+    mapping(uint256 => mapping(uint256 => mapping(uint256 => AmountPair)))
+        public deposits;
+    mapping(uint256 => mapping(uint256 => mapping(uint256 => uint256)))
+        public tokensTransferred0;
     mapping(uint256 => uint256) public lockMultiplierX10;
 
     uint256 public lastPriceFeedTimestamp;
@@ -132,10 +139,14 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             'Insufficient amounts'
         );
 
+        uint256 currentLockdropDay = (block.timestamp - startTimestamp) /
+            1 days;
         uint256 index = depositIndexes[msg.sender];
         if (index != 0) {
-            AmountPair memory prevDeposit = deposits[index][_locking_weeks];
-            deposits[index][_locking_weeks] = AmountPair(
+            AmountPair memory prevDeposit = deposits[index][_locking_weeks][
+                currentLockdropDay
+            ];
+            deposits[index][_locking_weeks][currentLockdropDay] = AmountPair(
                 prevDeposit.amount0 + optimalAmount0,
                 prevDeposit.amount1 + optimalAmount1
             );
@@ -143,7 +154,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             index = ++totalDeposits;
             depositIndexes[msg.sender] = index;
             indexToAddress[index] = msg.sender;
-            deposits[index][_locking_weeks] = AmountPair(
+            deposits[index][_locking_weeks][currentLockdropDay] = AmountPair(
                 optimalAmount0,
                 optimalAmount1
             );
@@ -176,29 +187,39 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 optimalAmount0;
         uint256 optimalAmount1;
         uint256 _totalTransferredWeightedX10;
+        uint256 _totalTransferredWithBonusX10000;
         AmountPair memory amounts;
         AmountPair memory optimalTotal;
         for (uint256 i = depositsProcessed + 1; i <= upperBound; ++i) {
             for (uint256 j = 1; j < 256; j <<= 1) {
-                if (AVAILABLE_LOCKING_WEEKS_MASK & j != 0) {
-                    amounts = deposits[i][j];
-                    (optimalAmount0, optimalAmount1) = _calculateOptimalAmounts(
-                        amounts.amount0,
-                        amounts.amount1
-                    );
-                    optimalTotal.amount0 += optimalAmount0;
-                    optimalTotal.amount1 += optimalAmount1;
+                for (uint256 k = 0; k < LOCKDROP_DURATION_DAYS; ++k) {
+                    if (AVAILABLE_LOCKING_WEEKS_MASK & j != 0) {
+                        amounts = deposits[i][j][k];
+                        (
+                            optimalAmount0,
+                            optimalAmount1
+                        ) = _calculateOptimalAmounts(
+                            amounts.amount0,
+                            amounts.amount1
+                        );
+                        optimalTotal.amount0 += optimalAmount0;
+                        optimalTotal.amount1 += optimalAmount1;
 
-                    tokensTransferred0[i][j] = optimalAmount0;
-                    _totalTransferredWeightedX10 +=
-                        lockMultiplierX10[j] *
-                        optimalAmount0;
+                        tokensTransferred0[i][j][k] = optimalAmount0;
+                        _totalTransferredWeightedX10 +=
+                            lockMultiplierX10[j] *
+                            optimalAmount0;
+                        _totalTransferredWithBonusX10000 +=
+                            lockMultiplierX10[j] *
+                            _calculateBonusX1000(k) *
+                            optimalAmount0;
 
-                    // leftovers
-                    deposits[i][j] = AmountPair(
-                        amounts.amount0 - optimalAmount0,
-                        amounts.amount1 - optimalAmount1
-                    );
+                        // leftovers
+                        deposits[i][j][k] = AmountPair(
+                            amounts.amount0 - optimalAmount0,
+                            amounts.amount1 - optimalAmount1
+                        );
+                    }
                 }
             }
         }
@@ -222,6 +243,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         );
         totalTransferred0 += optimalTotal.amount0;
         totalTransferredWeightedX10 += _totalTransferredWeightedX10;
+        totalTransferredWithBonusX10000 += _totalTransferredWithBonusX10000;
         depositsProcessed = upperBound;
         if (upperBound == totalDeposits) {
             totalLpTokens = IERC20(vsPair).balanceOf(address(this));
@@ -235,8 +257,13 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             'Unable to withdraw during current phase'
         );
 
-        AmountPair memory amounts = _calculateLeftovers(_to);
-        uint256 vrswAmount = _calculateVrsw(_to);
+        AmountPair memory amounts = leftoversClaimed[_to]
+            ? AmountPair(0, 0)
+            : _calculateLeftovers(_to);
+        uint256 vrswAmount = vrswClaimed[_to] ? 0 : _calculateVrsw(_to);
+
+        leftoversClaimed[_to] = true;
+        vrswClaimed[_to] = true;
 
         if (vrswAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vrswToken), _to, vrswAmount);
@@ -249,21 +276,28 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         }
     }
 
-    function withdrawLpTokens(address _to) external override {
+    function withdrawLpTokens(
+        address _to,
+        uint256 _locking_weeks
+    ) external override {
         require(
             currentPhase == Phase.WITHDRAW,
             'Unable to withdraw during current phase'
         );
-        (
-            uint256[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
-        ) = _calculateLpTokens(_to);
-        for (uint256 i = 0; i < LOCKING_WEEKS_NUMBER; ++i) {
-            if (block.timestamp < startTimestamp + locking_weeks[i] * 1 weeks)
-                break;
-            if (amounts[i] > 0) {
-                SafeERC20.safeTransfer(IERC20(vsPair), _to, amounts[i]);
-            }
+        require(
+            _locking_weeks & AVAILABLE_LOCKING_WEEKS_MASK != 0,
+            'Invalid locking period'
+        );
+        require(
+            block.timestamp > startTimestamp + _locking_weeks * 1 weeks,
+            'Too early'
+        );
+        uint256 lpAmount = lpTokensWithdrawn[_to][_locking_weeks]
+            ? 0
+            : _calculateLpTokens(_to, _locking_weeks);
+        lpTokensWithdrawn[_to][_locking_weeks] = true;
+        if (lpAmount > 0) {
+            SafeERC20.safeTransfer(IERC20(vsPair), _to, lpAmount);
         }
     }
 
@@ -274,7 +308,9 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             currentPhase == Phase.WITHDRAW,
             'Unable to view leftovers during current phase'
         );
-        return _calculateLeftovers(_who);
+        amounts = leftoversClaimed[_who]
+            ? AmountPair(0, 0)
+            : _calculateLeftovers(_who);
     }
 
     function viewLpTokens(
@@ -292,7 +328,15 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             currentPhase == Phase.WITHDRAW,
             'Unable to view leftovers during current phase'
         );
-        return _calculateLpTokens(_who);
+        uint256 outIndex;
+        for (uint256 i = 1; i < 256; i <<= 1) {
+            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
+                amounts[outIndex] = lpTokensWithdrawn[_who][i]
+                    ? 0
+                    : _calculateLpTokens(_who, i);
+                locking_weeks[outIndex++] = i;
+            }
+        }
     }
 
     function viewVrswTokens(
@@ -302,7 +346,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             currentPhase == Phase.WITHDRAW,
             'Unable to view leftovers during current phase'
         );
-        return _calculateVrsw(_who);
+        amount = vrswClaimed[_who] ? 0 : _calculateVrsw(_who);
     }
 
     function emergencyStop() external override {
@@ -368,27 +412,14 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     }
 
     function _calculateLpTokens(
-        address _who
-    )
-        private
-        view
-        returns (
-            uint256[LOCKING_WEEKS_NUMBER] memory amounts,
-            uint256[LOCKING_WEEKS_NUMBER] memory locking_weeks
-        )
-    {
+        address _who,
+        uint256 _locking_weeks
+    ) private view returns (uint256 amount) {
         uint256 index = depositIndexes[_who];
-        uint256 _totalLpTokens = totalLpTokens;
-        uint256 outIndex;
-        for (uint256 i = 1; i < 256; i <<= 1) {
-            if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                assert(outIndex < LOCKING_WEEKS_NUMBER);
-                amounts[outIndex] =
-                    (tokensTransferred0[index][i] * _totalLpTokens) /
-                    totalTransferred0;
-                locking_weeks[outIndex++] = i;
-            }
+        for (uint256 j = 0; j < LOCKDROP_DURATION_DAYS; ++j) {
+            amount += tokensTransferred0[index][_locking_weeks][j];
         }
+        amount = (amount * totalLpTokens) / totalTransferred0;
     }
 
     function _calculateLeftovers(
@@ -397,24 +428,34 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 index = depositIndexes[_who];
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                amounts.amount0 += deposits[index][i].amount0;
-                amounts.amount1 += deposits[index][i].amount1;
+                for (uint256 j = 0; j < LOCKDROP_DURATION_DAYS; ++j) {
+                    amounts.amount0 += deposits[index][i][j].amount0;
+                    amounts.amount1 += deposits[index][i][j].amount1;
+                }
             }
         }
     }
 
     function _calculateVrsw(address _who) private view returns (uint256) {
         uint256 index = depositIndexes[_who];
-        uint256 transferredWeightedX10;
+        uint256 transferredWithBonusX10000;
         for (uint256 i = 1; i < 256; i <<= 1) {
             if (AVAILABLE_LOCKING_WEEKS_MASK & i != 0) {
-                transferredWeightedX10 +=
-                    lockMultiplierX10[i] *
-                    tokensTransferred0[index][i];
+                for (uint256 j = 0; j < LOCKDROP_DURATION_DAYS; ++j) {
+                    transferredWithBonusX10000 +=
+                        lockMultiplierX10[i] *
+                        tokensTransferred0[index][i][j] *
+                        _calculateBonusX1000(j);
+                }
             }
         }
         return
-            (transferredWeightedX10 * totalVrswAllocated) /
-            totalTransferredWeightedX10;
+            (transferredWithBonusX10000 * totalVrswAllocated) /
+            totalTransferredWithBonusX10000;
+    }
+
+    function _calculateBonusX1000(uint256 day) private pure returns (uint256) {
+        // starting from 15% bonus will decrease by 2.5% every day
+        return 1150 - day * 25;
     }
 }
