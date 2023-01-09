@@ -14,6 +14,11 @@ abstract contract vUniswapPriceOracle is vPriceOracleBase {
         token0 = _token0;
         token1 = _token1;
         uniswapV3Oracle = IStaticOracle(_uniswapV3Oracle);
+        IStaticOracle(_uniswapV3Oracle).prepareAllAvailablePoolsWithTimePeriod(
+            _token0,
+            _token1,
+            UNISWAP_ORACLE_TIME_PERIOD
+        );
     }
 
     function getUniswapCurrentPriceRatioShifted()
@@ -22,7 +27,7 @@ abstract contract vUniswapPriceOracle is vPriceOracleBase {
         returns (uint256 quoteAmount)
     {
         (quoteAmount, ) = uniswapV3Oracle.quoteAllAvailablePoolsWithTimePeriod(
-            PRICE_RATIO_SHIFT_SIZE,
+            uint128(1 << PRICE_RATIO_SHIFT_SIZE),
             token0,
             token1,
             UNISWAP_ORACLE_TIME_PERIOD
