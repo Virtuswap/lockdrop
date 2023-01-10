@@ -389,7 +389,10 @@ describe('vIntermediatePool: Phase 3', function () {
                 .deposit(amount0, amount1, 1);
         }
 
+        await intermediatePool.deposit(amount0, amount1, 0);
+        await intermediatePool.deposit(amount0, amount1, 1);
         await intermediatePool.deposit(amount0, amount1, 2);
+        await intermediatePool.deposit(amount0, amount1, 3);
         await intermediatePool
             .connect(accounts[2])
             .deposit(amount0, amount1, 2);
@@ -441,9 +444,31 @@ describe('vIntermediatePool: Phase 3', function () {
         expect(balanceAfter).to.be.above(0);
     });
 
-    it('Withdraw half of lp tokens', async () => {
+    it('Withdraw lp tokens for myself', async () => {
         const lpTokensBefore = await pair.balanceOf(deployer.address);
+        await expect(
+            intermediatePool.withdrawLpTokens(deployer.address, 1)
+        ).to.revertedWith('Too early');
+        const lpTokensAfter1 = await pair.balanceOf(deployer.address);
 
+        // nothing is withdrawn because of locking
+        expect(lpTokensAfter1).to.equal(lpTokensBefore);
+
+        // 4 weeks passed
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 4 * 7 * 24 * 60 * 60
+        );
+
+        await intermediatePool.withdrawLpTokens(deployer.address, 1);
+        await intermediatePool.withdrawLpTokens(deployer.address, 2);
+        await expect(
+            intermediatePool.withdrawLpTokens(deployer.address, 3)
+        ).to.revertedWith('Too early');
+        const lpTokensAfter2 = await pair.balanceOf(deployer.address);
+        // only 4-weeks tokens are withdrawn
+        expect(lpTokensAfter2).to.be.above(lpTokensAfter1);
+
+        // another 4 weeks passed
         await time.setNextBlockTimestamp(
             (await time.latest()) + 4 * 7 * 24 * 60 * 60
         );
@@ -451,6 +476,9 @@ describe('vIntermediatePool: Phase 3', function () {
         await intermediatePool.withdrawLpTokens(deployer.address, 0);
         await intermediatePool.withdrawLpTokens(deployer.address, 1);
         await intermediatePool.withdrawLpTokens(deployer.address, 2);
+        const lpTokensAfter3 = await pair.balanceOf(deployer.address);
+        // all lp tokens are withdrawn
+        expect(lpTokensAfter3).to.be.above(lpTokensAfter2);
         await intermediatePool.withdrawLpTokens(deployer.address, 3);
         const lpTokensAfter = await pair.balanceOf(deployer.address);
         expect(lpTokensAfter).to.be.above(lpTokensBefore);
@@ -490,7 +518,7 @@ describe('vIntermediatePool: Phase 3', function () {
                 await pair.balanceOf(intermediatePool.address)
             ).toString()}`
         );
-        expect(await pair.balanceOf(intermediatePool.address)).to.be.below(20);
+        expect(await pair.balanceOf(intermediatePool.address)).to.be.below(30);
     });
 
     it('Claim all leftovers', async () => {
