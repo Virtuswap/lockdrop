@@ -28,8 +28,8 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     uint256 public totalLpTokens;
     uint256 public totalTransferred0;
     uint256 public totalTransferredWithBonusX10000;
-    mapping(address => mapping(uint256 => uint256)) public lpTokensWithdrawn;
-    mapping(address => bool) public isLeftoversClaimed;
+    mapping(address => mapping(uint256 => bool)) public areLpTokensWithdrawn;
+    mapping(address => bool) public areLeftoversClaimed;
     mapping(address => uint256) public depositIndexes;
     mapping(uint256 => address) public indexToAddress;
     mapping(uint256 => mapping(uint256 => mapping(uint256 => AmountPair)))
@@ -271,12 +271,12 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     function claimLeftovers(address _to) external override {
         require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
 
-        AmountPair memory amounts = isLeftoversClaimed[_to]
+        AmountPair memory amounts = areLeftoversClaimed[_to]
             ? AmountPair(0, 0)
             : _calculateLeftovers(_to);
-        uint256 vrswAmount = isLeftoversClaimed[_to] ? 0 : _calculateVrsw(_to);
+        uint256 vrswAmount = areLeftoversClaimed[_to] ? 0 : _calculateVrsw(_to);
 
-        isLeftoversClaimed[_to] = true;
+        areLeftoversClaimed[_to] = true;
 
         if (vrswAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vrswToken), _to, vrswAmount);
@@ -298,19 +298,17 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             _lockingPeriodIndex < LOCKING_PERIODS_NUMBER,
             'Invalid locking period'
         );
-        uint256 lockDuration = availableLockingPeriods[_lockingPeriodIndex]
-            .durationWeeks * 1 weeks;
-        uint256 lpAmount = _calculateLpTokens(_to, _lockingPeriodIndex);
-        if (block.timestamp < startTimestamp + lockDuration) {
-            lpAmount *= block.timestamp - startTimestamp;
-            lpAmount /= lockDuration;
-        }
-        lpAmount -= lpTokensWithdrawn[_to][_lockingPeriodIndex];
-        lpTokensWithdrawn[_to][_lockingPeriodIndex] += lpAmount;
-        assert(
-            lpTokensWithdrawn[_to][_lockingPeriodIndex] <=
-                _calculateLpTokens(_to, _lockingPeriodIndex)
+        require(
+            block.timestamp >
+                startTimestamp +
+                    availableLockingPeriods[_lockingPeriodIndex].durationWeeks *
+                    1 weeks,
+            'Too early'
         );
+        uint256 lpAmount = areLpTokensWithdrawn[_to][_lockingPeriodIndex]
+            ? 0
+            : _calculateLpTokens(_to, _lockingPeriodIndex);
+        areLpTokensWithdrawn[_to][_lockingPeriodIndex] = true;
         if (lpAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vsPair), _to, lpAmount);
         }
@@ -320,7 +318,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         address _who
     ) external view override returns (AmountPair memory amounts) {
         require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
-        amounts = isLeftoversClaimed[_who]
+        amounts = areLeftoversClaimed[_who]
             ? AmountPair(0, 0)
             : _calculateLeftovers(_who);
     }
@@ -335,9 +333,9 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     {
         require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
         for (uint256 i = 0; i < LOCKING_PERIODS_NUMBER; ++i) {
-            amounts[i] =
-                _calculateLpTokens(_who, i) -
-                lpTokensWithdrawn[_who][i];
+            amounts[i] = areLpTokensWithdrawn[_who][i]
+                ? 0
+                : _calculateLpTokens(_who, i);
         }
     }
 
@@ -345,7 +343,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         address _who
     ) external view override returns (uint256 amount) {
         require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
-        amount = isLeftoversClaimed[_who] ? 0 : _calculateVrsw(_who);
+        amount = areLeftoversClaimed[_who] ? 0 : _calculateVrsw(_who);
     }
 
     function emergencyStop() external override {
