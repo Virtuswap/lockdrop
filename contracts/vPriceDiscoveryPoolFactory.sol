@@ -2,71 +2,60 @@
 
 pragma solidity ^0.8.0;
 
-import './vIntermediatePool.sol';
-import './interfaces/IvIntermediatePoolFactory.sol';
+import './vPriceDiscoveryPool.sol';
+import './interfaces/IvPriceDiscoveryPoolFactory.sol';
 import './interfaces/virtuswap/IvPairFactory.sol';
 
-contract vIntermediatePoolFactory is IvIntermediatePoolFactory {
-    mapping(address => mapping(address => address)) public intermediatePools;
-    address[] public allIntermediatePools;
+contract vPriceDiscoveryPoolFactory is IvPriceDiscoveryPoolFactory {
+    mapping(address => mapping(address => address)) public priceDiscoveryPools;
+    address[] public allPriceDiscoveryPools;
 
     address public override admin;
 
     address public immutable vsRouter;
-    address public immutable vrswToken;
 
     modifier onlyAdmin() {
         require(msg.sender == admin, 'OA');
         _;
     }
 
-    constructor(address _vsRouter, address _vrswToken) {
+    constructor(address _vsRouter) {
         vsRouter = _vsRouter;
-        vrswToken = _vrswToken;
         admin = msg.sender;
     }
 
-    function getIntermediatePool(
+    function getPriceDiscoveryPool(
         address _token0,
         address _token1
     ) external view override returns (address) {
-        return intermediatePools[_token0][_token1];
+        return priceDiscoveryPools[_token0][_token1];
     }
 
-    function createIntermediatePool(
+    function createPriceDiscoveryPool(
         address _token0,
         address _token1,
-        address _uniswapOracle,
-        address _priceFeed0,
-        address _priceFeed1,
-        uint256 _startTimestamp,
-        uint256 _totalVrswAllocated
+        uint256 _startTimestamp
     ) external override returns (address pool) {
         require(_token0 != _token1, 'Identical addresses');
         require(_token0 != address(0), 'Zero address');
         require(
-            intermediatePools[_token0][_token1] == address(0),
+            priceDiscoveryPools[_token0][_token1] == address(0),
             'Pool exists'
         );
 
         pool = address(
-            new vIntermediatePool(
+            new vPriceDiscoveryPool(
                 address(this),
                 _token0,
                 _token1,
                 vsRouter,
-                _uniswapOracle,
-                _priceFeed0,
-                _priceFeed1,
-                vrswToken,
-                _startTimestamp,
-                _totalVrswAllocated
+                _startTimestamp
             )
         );
 
-        intermediatePools[_token0][_token1] = pool;
-        intermediatePools[_token1][_token0] = pool;
-        allIntermediatePools.push(pool);
+        priceDiscoveryPools[_token0][_token1] = pool;
+        priceDiscoveryPools[_token1][_token0] = pool;
+        allPriceDiscoveryPools.push(pool);
     }
 
     function changeAdmin(address _newAdmin) external override onlyAdmin {

@@ -5,7 +5,7 @@ pragma solidity ^0.8.0;
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
 import './interfaces/IvPriceDiscoveryPool.sol';
-import './interfaces/IvIntermediatePoolFactory.sol';
+import './interfaces/IvPriceDiscoveryPoolFactory.sol';
 import './interfaces/virtuswap/IvRouter.sol';
 import './interfaces/virtuswap/IvPairFactory.sol';
 
@@ -162,7 +162,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function emergencyStop() external override {
         require(
-            msg.sender == IvIntermediatePoolFactory(factory).admin(),
+            msg.sender == IvPriceDiscoveryPoolFactory(factory).admin(),
             'Admin only'
         );
         currentPhase = Phase.STOPPED;
@@ -170,7 +170,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function emergencyResume(Phase phase) external override {
         require(
-            msg.sender == IvIntermediatePoolFactory(factory).admin(),
+            msg.sender == IvPriceDiscoveryPoolFactory(factory).admin(),
             'Admin only'
         );
         require(currentPhase == Phase.STOPPED, 'The contract is not stopped');
@@ -179,7 +179,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function emergencyRescueFunds() external override {
         require(
-            msg.sender == IvIntermediatePoolFactory(factory).admin(),
+            msg.sender == IvPriceDiscoveryPoolFactory(factory).admin(),
             'Admin only'
         );
         require(currentPhase == Phase.STOPPED, 'The contract is not stopped');
