@@ -146,14 +146,16 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function withdrawLpTokens(address _to) external override {
         require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
-        uint256 lpAmount = _calculateLpTokens(_to);
+        uint256 lpForAddress = _calculateLpTokens(_to);
+        require(lpTokensWithdrawn[_to] < lpForAddress, 'Already withdrawn');
+        uint256 lpAmount = lpForAddress;
         if (block.timestamp < startTimestamp + LP_TOKENS_LOCKING_PERIOD) {
             lpAmount *= block.timestamp - startTimestamp;
             lpAmount /= LP_TOKENS_LOCKING_PERIOD;
         }
         lpAmount -= lpTokensWithdrawn[_to];
         lpTokensWithdrawn[_to] += lpAmount;
-        assert(lpTokensWithdrawn[_to] <= _calculateLpTokens(_to));
+        assert(lpTokensWithdrawn[_to] <= lpForAddress);
         if (lpAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vsPair), _to, lpAmount);
         }
@@ -239,7 +241,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         if (_currentDay < 6) {
             numerator = 0;
             denominator = 1;
-        } else if (_currentDay < 6) {
+        } else {
             numerator = block.timestamp - startTimestamp - 6 days;
             denominator = 1 days;
         }
