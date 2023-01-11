@@ -70,16 +70,19 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     }
 
     function deposit(address _token, uint256 _amount) external override {
-        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         require(_amount > 0, 'Insufficient amount');
         if (_token == vrswToken) {
             require(
                 block.timestamp < startTimestamp + VRSW_DEPOSIT_DURATION,
-                'Deposits closed'
+                'VRSW deposits closed'
             );
             vrswDeposits[msg.sender] += _amount;
         } else {
             require(_token == opponentToken, 'Invalid token');
+            require(
+                block.timestamp < startTimestamp + DEPOSIT_PHASE_DURATION,
+                'Deposits closed'
+            );
             opponentDeposits[msg.sender] += _amount;
         }
 
@@ -95,12 +98,15 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         address _token,
         uint256 _amount
     ) external override {
-        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         require(
             _token == vrswToken || _token == opponentToken,
             'Invalid token'
         );
         require(_amount > 0, 'Insufficient amount');
+        require(
+            block.timestamp < startTimestamp + DEPOSIT_PHASE_DURATION,
+            'Deposits closed'
+        );
 
         uint256 penalty = _calculatePenalty(_token, _amount);
         uint256 amountOut = _amount - penalty;

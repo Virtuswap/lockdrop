@@ -104,7 +104,6 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 _amount1,
         uint256 _lockingPeriodIndex
     ) external override {
-        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
         require(
             _lockingPeriodIndex < LOCKING_PERIODS_NUMBER,
             'Invalid locking period'
@@ -164,7 +163,11 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         uint256 _lockingPeriodIndex,
         uint256 _depositDay
     ) external override {
-        require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
+        require(
+            block.timestamp <
+                startTimestamp + DEPOSIT_PHASE_DAYS_NUMBER * 1 days,
+            'Deposits closed'
+        );
         require(
             _lockingPeriodIndex < LOCKING_PERIODS_NUMBER,
             'Invalid locking period'
