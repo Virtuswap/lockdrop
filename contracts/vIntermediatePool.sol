@@ -179,6 +179,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         AmountPair memory _deposit = deposits[index][_lockingPeriodIndex][
             _depositDay
         ];
+        require(_deposit.amount0 > 0 && _deposit.amount1 > 0, 'No deposit');
         AmountPair memory _penalty = _calculatePenalty(_deposit, _currentDay);
         AmountPair memory _withdrawAmounts = AmountPair(
             _deposit.amount0 - _penalty.amount0,
