@@ -14,6 +14,110 @@ import {
 } from '../typechain-types';
 import { time } from '@nomicfoundation/hardhat-network-helpers';
 
+describe('vIntermediatePool: Prerequisites', function () {
+    const vrswAllocated = '1000000000000000000000';
+    let intermediatePoolFactory: VIntermediatePoolFactory;
+    let intermediatePool: VIntermediatePool;
+    let mockUniswapOracle: MockStaticOracle;
+    let mockV3Aggregator0: MockV3Aggregator;
+    let mockV3Aggregator1: MockV3Aggregator;
+    let mockVPairFactory: MockVPairFactory;
+    let token0: Token0;
+    let token1: Token1;
+
+    beforeEach(async () => {
+        await deployments.fixture(['all']);
+        intermediatePoolFactory = await ethers.getContract(
+            'intermediatePoolFactory'
+        );
+        mockVPairFactory = await ethers.getContract('MockVPairFactory');
+        mockUniswapOracle = await ethers.getContract('MockUniswapOracle');
+        mockV3Aggregator0 = await ethers.getContract('MockV3Aggregator0');
+        mockV3Aggregator1 = await ethers.getContract('MockV3Aggregator1');
+        token0 = await ethers.getContract('Token0');
+        token1 = await ethers.getContract('Token1');
+        await mockVPairFactory.createPair(token0.address, token1.address);
+    });
+
+    it('Trigger deposit phase works', async () => {
+        await intermediatePoolFactory.createIntermediatePool(
+            token0.address,
+            token1.address,
+            mockUniswapOracle.address,
+            mockV3Aggregator0.address,
+            mockV3Aggregator1.address,
+            (await time.latest()) + 1,
+            vrswAllocated
+        );
+        const intermediatePoolAddress =
+            await intermediatePoolFactory.getIntermediatePool(
+                token0.address,
+                token1.address
+            );
+        const factory = await ethers.getContractFactory('vIntermediatePool');
+        intermediatePool = factory.attach(
+            intermediatePoolAddress
+        ) as VIntermediatePool;
+
+        let phaseBefore = await intermediatePool.currentPhase();
+        await intermediatePool.triggerDepositPhase();
+        let phaseAfter = await intermediatePool.currentPhase();
+        expect(phaseBefore).to.equal(0);
+        expect(phaseAfter).to.equal(1);
+    });
+
+    it('Trigger deposit phase fails when called from wrong phase', async () => {
+        await intermediatePoolFactory.createIntermediatePool(
+            token0.address,
+            token1.address,
+            mockUniswapOracle.address,
+            mockV3Aggregator0.address,
+            mockV3Aggregator1.address,
+            await time.latest(),
+            vrswAllocated
+        );
+        const intermediatePoolAddress =
+            await intermediatePoolFactory.getIntermediatePool(
+                token0.address,
+                token1.address
+            );
+        const factory = await ethers.getContractFactory('vIntermediatePool');
+        intermediatePool = factory.attach(
+            intermediatePoolAddress
+        ) as VIntermediatePool;
+
+        await intermediatePool.triggerDepositPhase();
+        await expect(intermediatePool.triggerDepositPhase()).to.revertedWith(
+            'Wrong phase'
+        );
+    });
+
+    it('Trigger deposit phase fails when called too early', async () => {
+        await intermediatePoolFactory.createIntermediatePool(
+            token0.address,
+            token1.address,
+            mockUniswapOracle.address,
+            mockV3Aggregator0.address,
+            mockV3Aggregator1.address,
+            (await time.latest()) + 3,
+            vrswAllocated
+        );
+        const intermediatePoolAddress =
+            await intermediatePoolFactory.getIntermediatePool(
+                token0.address,
+                token1.address
+            );
+        const factory = await ethers.getContractFactory('vIntermediatePool');
+        intermediatePool = factory.attach(
+            intermediatePoolAddress
+        ) as VIntermediatePool;
+
+        await expect(intermediatePool.triggerDepositPhase()).to.revertedWith(
+            'Too early'
+        );
+    });
+});
+
 describe('vIntermediatePool: Phase 1', function () {
     let intermediatePoolFactory: VIntermediatePoolFactory;
     let intermediatePool: VIntermediatePool;
@@ -70,7 +174,40 @@ describe('vIntermediatePool: Phase 1', function () {
         );
     });
 
-    it('Price ratio must be updated', async () => {
+    it('Trigger transfer phase works', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
+        await mockV3Aggregator0.updateAnswer(200000000);
+
+        let phaseBefore = await intermediatePool.currentPhase();
+        let priceRatioBefore = await intermediatePool.priceRatioShifted();
+        await intermediatePool.triggerTransferPhase();
+        let phaseAfter = await intermediatePool.currentPhase();
+        let priceRatioAfter = await intermediatePool.priceRatioShifted();
+        expect(phaseBefore).to.equal(1);
+        expect(phaseAfter).to.equal(2);
+        expect(priceRatioBefore).to.equal(0);
+        expect(priceRatioAfter).to.be.equal(2147483648);
+    });
+
+    it('Trigger transfer phase fails when called too early', async () => {
+        await expect(intermediatePool.triggerTransferPhase()).to.revertedWith(
+            'Too early'
+        );
+    });
+
+    it('Trigger transfer phase fails when called from wrong phase', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
+        await intermediatePool.triggerTransferPhase();
+        await expect(intermediatePool.triggerTransferPhase()).to.revertedWith(
+            'Wrong phase'
+        );
+    });
+
+    it('Deposit price ratio is updated', async () => {
         const amount0 = ethers.utils.parseEther('2');
         const amount1 = ethers.utils.parseEther('1');
         const priceBefore = (
@@ -92,7 +229,7 @@ describe('vIntermediatePool: Phase 1', function () {
         expect(priceAfter2 < priceAfter);
     });
 
-    it('Must revert if locking period is invalid', async () => {
+    it('Deposit reverts if locking period index is invalid', async () => {
         const amount0 = ethers.utils.parseEther('2');
         const amount1 = ethers.utils.parseEther('1');
         await expect(
@@ -100,14 +237,41 @@ describe('vIntermediatePool: Phase 1', function () {
         ).to.revertedWith('Invalid locking period');
     });
 
-    it('First time deposit', async () => {
+    it('Deposit reverts if deposit time is over', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
+        const amount0 = ethers.utils.parseEther('2');
+        const amount1 = ethers.utils.parseEther('1');
+        await expect(
+            intermediatePool.deposit(amount0, amount1, 3)
+        ).to.revertedWith('Deposits closed');
+    });
+
+    it('First time deposit creates index', async () => {
         const amount0 = ethers.utils.parseEther('10');
         const amount1 = ethers.utils.parseEther('10');
         const token0BalanceBefore = await token0.balanceOf(deployer.address);
         const token1BalanceBefore = await token1.balanceOf(deployer.address);
+        const totalDepositsBefore = await intermediatePool.totalDeposits();
+        const depositIndexBefore = await intermediatePool.depositIndexes(
+            deployer.address
+        );
+        const indexToAddrBefore = await intermediatePool.indexToAddress(
+            depositIndexBefore
+        );
+        const depositsBefore = await intermediatePool.deposits(1, 2, 0);
         await intermediatePool.deposit(amount0, amount1, 2);
         const token0BalanceAfter = await token0.balanceOf(deployer.address);
         const token1BalanceAfter = await token1.balanceOf(deployer.address);
+        const totalDepositsAfter = await intermediatePool.totalDeposits();
+        const depositIndexAfter = await intermediatePool.depositIndexes(
+            deployer.address
+        );
+        const indexToAddrAfter = await intermediatePool.indexToAddress(
+            depositIndexAfter
+        );
+        const depositsAfter = await intermediatePool.deposits(1, 2, 0);
         const amount0Expected = ethers.utils.parseEther('10');
         const amount1Expected = ethers.utils.parseEther('5');
         expect(token0BalanceBefore.sub(token0BalanceAfter)).equals(
@@ -116,59 +280,136 @@ describe('vIntermediatePool: Phase 1', function () {
         expect(token1BalanceBefore.sub(token1BalanceAfter)).equals(
             amount1Expected
         );
-        expect(await intermediatePool.totalDeposits()).equals(1);
+        expect(totalDepositsBefore).equals(0);
+        expect(totalDepositsAfter).equals(1);
+        expect(depositIndexBefore).equals(0);
+        expect(depositIndexAfter).equals(1);
+        expect(indexToAddrBefore).equals(ethers.constants.AddressZero);
+        expect(indexToAddrAfter).equals(deployer.address);
+        expect(depositsBefore.toString()).equals('0,0');
+        expect(depositsAfter.toString()).equals(
+            `${ethers.utils.parseEther('10')},${ethers.utils.parseEther('5')}`
+        );
     });
 
-    it('Two deposits with the same locking period', async () => {
-        let amount0 = ethers.utils.parseEther('10');
-        let amount1 = ethers.utils.parseEther('1');
-        const token0BalanceBefore = await token0.balanceOf(deployer.address);
-        const token1BalanceBefore = await token1.balanceOf(deployer.address);
+    it('Deposit with old user updates deposits', async () => {
+        const amount0 = ethers.utils.parseEther('10');
+        const amount1 = ethers.utils.parseEther('10');
         await intermediatePool.deposit(amount0, amount1, 2);
-        amount0 = ethers.utils.parseEther('1');
-        amount1 = ethers.utils.parseEther('10');
-        await intermediatePool.deposit(amount0, amount1, 2);
-        const token0BalanceAfter = await token0.balanceOf(deployer.address);
-        const token1BalanceAfter = await token1.balanceOf(deployer.address);
-        const amount0Expected = ethers.utils.parseEther('3');
-        const amount1Expected = ethers.utils.parseEther('1.5');
-        expect(token0BalanceBefore.sub(token0BalanceAfter)).equals(
-            amount0Expected
-        );
-        expect(token1BalanceBefore.sub(token1BalanceAfter)).equals(
-            amount1Expected
-        );
-        expect(await intermediatePool.totalDeposits()).equals(1);
-    });
 
-    it('Two deposits with different locking periods', async () => {
-        let amount0 = ethers.utils.parseEther('10');
-        let amount1 = ethers.utils.parseEther('10');
         const token0BalanceBefore = await token0.balanceOf(deployer.address);
         const token1BalanceBefore = await token1.balanceOf(deployer.address);
-        await intermediatePool.deposit(amount0, amount1, 2);
-        amount0 = ethers.utils.parseEther('1');
-        amount1 = ethers.utils.parseEther('10');
+        const totalDepositsBefore = await intermediatePool.totalDeposits();
+        const depositIndexBefore = await intermediatePool.depositIndexes(
+            deployer.address
+        );
+        const indexToAddrBefore = await intermediatePool.indexToAddress(
+            depositIndexBefore
+        );
+        const depositsBefore = await intermediatePool.deposits(1, 2, 0);
         await intermediatePool.deposit(amount0, amount1, 1);
         const token0BalanceAfter = await token0.balanceOf(deployer.address);
         const token1BalanceAfter = await token1.balanceOf(deployer.address);
-        const amount0Expected = ethers.utils.parseEther('11');
-        const amount1Expected = ethers.utils.parseEther('5.5');
+        const totalDepositsAfter = await intermediatePool.totalDeposits();
+        const depositIndexAfter = await intermediatePool.depositIndexes(
+            deployer.address
+        );
+        const indexToAddrAfter = await intermediatePool.indexToAddress(
+            depositIndexAfter
+        );
+        const depositsAfter = await intermediatePool.deposits(1, 1, 0);
+        const amount0Expected = ethers.utils.parseEther('10');
+        const amount1Expected = ethers.utils.parseEther('5');
         expect(token0BalanceBefore.sub(token0BalanceAfter)).equals(
             amount0Expected
         );
         expect(token1BalanceBefore.sub(token1BalanceAfter)).equals(
             amount1Expected
         );
-        expect(await intermediatePool.totalDeposits()).equals(1);
+        expect(totalDepositsBefore).equals(totalDepositsAfter);
+        expect(depositIndexBefore).equals(depositIndexAfter).equals(1);
+        expect(indexToAddrBefore).equals(indexToAddrAfter);
+        expect(depositsBefore.toString()).equals(
+            `${ethers.utils.parseEther('10')},${ethers.utils.parseEther('5')}`
+        );
+        expect(depositsAfter.toString()).equals(
+            `${ethers.utils.parseEther('10')},${ethers.utils.parseEther('5')}`
+        );
     });
 
-    it('Must revert if amount is zero', async () => {
+    it('Deposit reverts if amount is zero', async () => {
         let amount0 = ethers.utils.parseEther('0');
         let amount1 = ethers.utils.parseEther('10');
         await expect(
             intermediatePool.deposit(amount0, amount1, 2)
         ).to.revertedWith('Insufficient amounts');
+        await expect(
+            intermediatePool.deposit(amount1, amount0, 2)
+        ).to.revertedWith('Insufficient amounts');
+        amount1 = ethers.utils.parseEther('0');
+        await expect(
+            intermediatePool.deposit(amount1, amount0, 2)
+        ).to.revertedWith('Insufficient amounts');
+    });
+
+    it('Withdraw with penalty reverts if deposit time is over', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
+        await expect(
+            intermediatePool.withdrawWithPenalty(0, 0)
+        ).to.revertedWith('Deposits closed');
+    });
+
+    it('Withdraw with penalty reverts if locking period index is wrong', async () => {
+        await expect(
+            intermediatePool.withdrawWithPenalty(4, 0)
+        ).to.revertedWith('Invalid locking period');
+    });
+
+    it('Withdraw with penalty reverts if deposit day is wrong', async () => {
+        await expect(
+            intermediatePool.withdrawWithPenalty(3, 7)
+        ).to.revertedWith('Invalid deposit day');
+    });
+
+    it('Withdraw with penalty reverts if deposit is zero', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 5 * 24 * 60 * 60
+        );
+        await expect(
+            intermediatePool.withdrawWithPenalty(3, 0)
+        ).to.revertedWith('No deposit');
+    });
+
+    it('Withdraw with penalty works', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 5 * 24 * 60 * 60
+        );
+        const amount0 = ethers.utils.parseEther('10');
+        const amount1 = ethers.utils.parseEther('5');
+        await intermediatePool.deposit(amount0, amount1, 0);
+
+        const depositBefore = await intermediatePool.deposits(1, 0, 5);
+        const token0BalanceBefore = await token0.balanceOf(deployer.address);
+        const token1BalanceBefore = await token1.balanceOf(deployer.address);
+        const penaltiesBefore = await intermediatePool.penalties();
+        await intermediatePool.withdrawWithPenalty(0, 5);
+        const penaltiesAfter = await intermediatePool.penalties();
+        const token0BalanceAfter = await token0.balanceOf(deployer.address);
+        const token1BalanceAfter = await token1.balanceOf(deployer.address);
+        const depositAfter = await intermediatePool.deposits(1, 0, 5);
+        expect(depositBefore.toString()).equals(`${amount0},${amount1}`);
+        expect(depositAfter.toString()).equals('0,0');
+        expect(penaltiesBefore.toString()).equals('0,0');
+        expect(token0BalanceAfter).to.be.above(token0BalanceBefore);
+        expect(token1BalanceAfter).to.be.above(token1BalanceBefore);
+        expect(
+            token0BalanceAfter.sub(token0BalanceBefore).add(penaltiesAfter[0])
+        ).equals(amount0);
+        expect(
+            token1BalanceAfter.sub(token1BalanceBefore).add(penaltiesAfter[1])
+        ).equals(amount1);
     });
 });
 
@@ -248,15 +489,17 @@ describe('vIntermediatePool: Phase 2', function () {
             amount1 = amount1.add(ethers.utils.parseEther('10'));
             await intermediatePool
                 .connect(account)
-                .deposit(amount0, amount1, 1);
+                .deposit(amount0, amount1, 0);
         }
+        await intermediatePool.deposit(amount0, amount1, 1);
         await intermediatePool.deposit(amount0, amount1, 2);
+        await intermediatePool.deposit(amount0, amount1, 3);
         await intermediatePool
             .connect(accounts[2])
-            .deposit(amount0, amount1, 3);
+            .deposit(amount0, amount1, 2);
         await intermediatePool
             .connect(accounts[1])
-            .deposit(amount0, amount1, 1);
+            .deposit(amount0, amount1, 3);
         await time.setNextBlockTimestamp(
             (await time.latest()) + 7 * 24 * 60 * 60
         );
@@ -264,8 +507,33 @@ describe('vIntermediatePool: Phase 2', function () {
     });
 
     it('Transfer all deposits in 1 transaction', async () => {
-        const totalDeposits = await intermediatePool.totalDeposits();
-        await intermediatePool.transferToRealPool(totalDeposits);
+        const totalDepositsBefore = await intermediatePool.totalDeposits();
+        const depositBefore = await intermediatePool.deposits(1, 0, 0);
+        const tokensTransferredBefore =
+            await intermediatePool.tokensTransferred0(1, 0, 0);
+        const totalTransferredBefore =
+            await intermediatePool.totalTransferred0();
+        const totalTransferredWithBonusBefore =
+            await intermediatePool.totalTransferredWithBonusX10000();
+        await intermediatePool.transferToRealPool(totalDepositsBefore);
+        const tokensTransferredAfter =
+            await intermediatePool.tokensTransferred0(1, 0, 0);
+        const depositAfter = await intermediatePool.deposits(1, 0, 0);
+        const totalTransferredAfter =
+            await intermediatePool.totalTransferred0();
+        const totalTransferredWithBonusAfter =
+            await intermediatePool.totalTransferredWithBonusX10000();
+
+        expect(totalTransferredWithBonusBefore).to.be.below(
+            totalTransferredWithBonusAfter
+        );
+        expect(totalTransferredWithBonusBefore).equals(0);
+        expect(totalTransferredBefore).to.be.below(totalTransferredAfter);
+        expect(totalTransferredBefore).equals(0);
+        expect(tokensTransferredBefore).to.be.below(tokensTransferredAfter);
+        // leftovers
+        expect(depositAfter.toString()).equals('0,0');
+        expect(depositAfter.toString()).not.equals(depositBefore.toString());
         // all tokens were transferred
         expect(await token0.balanceOf(intermediatePool.address)).to.equal(0);
         expect(await token1.balanceOf(intermediatePool.address)).to.equal(0);
@@ -291,9 +559,17 @@ describe('vIntermediatePool: Phase 2', function () {
         expect(await intermediatePool.totalLpTokens()).to.equal(300);
     });
 
-    it('Must revert if transfers amount is zero', async () => {
+    it('Transfer to real pool reverts if transfers number is zero', async () => {
         await expect(intermediatePool.transferToRealPool(0)).to.revertedWith(
             'Invalid transfers number'
+        );
+    });
+
+    it('Transfer to real pool reverts if wrong phase', async () => {
+        await intermediatePool.emergencyStop();
+        await intermediatePool.emergencyResume('1');
+        await expect(intermediatePool.transferToRealPool(0)).to.revertedWith(
+            'Wrong phase'
         );
     });
 });
