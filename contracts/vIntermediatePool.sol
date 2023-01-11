@@ -109,6 +109,11 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             _lockingPeriodIndex < LOCKING_PERIODS_NUMBER,
             'Invalid locking period'
         );
+        require(
+            block.timestamp <
+                startTimestamp + DEPOSIT_PHASE_DAYS_NUMBER * 1 days,
+            'Deposits closed'
+        );
         require(_amount0 > 0 && _amount1 > 0, 'Insufficient amounts');
 
         priceRatioShifted = getCurrentPriceRatioShifted();
