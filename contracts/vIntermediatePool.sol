@@ -114,7 +114,6 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                 startTimestamp + DEPOSIT_PHASE_DAYS_NUMBER * 1 days,
             'Deposits closed'
         );
-        require(_amount0 > 0 && _amount1 > 0, 'Insufficient amounts');
 
         priceRatioShifted = getCurrentPriceRatioShifted();
 
@@ -125,7 +124,7 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
 
         require(
             optimalAmounts.amount0 > 0 && optimalAmounts.amount1 > 0,
-            'Insufficient optimal amounts'
+            'Insufficient amounts'
         );
 
         uint256 currentDay = (block.timestamp - startTimestamp) / 1 days;
