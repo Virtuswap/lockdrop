@@ -240,18 +240,12 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             }
         }
 
-        IERC20(token0).approve(
-            vsRouter,
-            IERC20(token0).balanceOf(address(this))
-        );
-        IERC20(token1).approve(
-            vsRouter,
-            IERC20(token1).balanceOf(address(this))
-        );
         AmountPair memory toTransfer = AmountPair(
             optimalTotal.amount0 + penalties.amount0,
             optimalTotal.amount1 + penalties.amount1
         );
+        IERC20(token0).approve(vsRouter, toTransfer.amount0);
+        IERC20(token1).approve(vsRouter, toTransfer.amount1);
         penalties = AmountPair(0, 0);
         IvRouter(vsRouter).addLiquidity(
             token0,
