@@ -12,6 +12,91 @@ import {
 } from '../typechain-types';
 import { time } from '@nomicfoundation/hardhat-network-helpers';
 
+describe('vPriceDiscoveryPool: Prerequisites', function () {
+    let priceDiscoveryPoolFactory: VPriceDiscoveryPoolFactory;
+    let priceDiscoveryPool: VPriceDiscoveryPool;
+    let mockVPairFactory: MockVPairFactory;
+    let token0: Token0;
+    let token1: Token1;
+
+    beforeEach(async () => {
+        await deployments.fixture(['all']);
+        priceDiscoveryPoolFactory = await ethers.getContract(
+            'priceDiscoveryPoolFactory'
+        );
+        mockVPairFactory = await ethers.getContract('MockVPairFactory');
+        token0 = await ethers.getContract('Token0');
+        token1 = await ethers.getContract('Token1');
+        await mockVPairFactory.createPair(token0.address, token1.address);
+    });
+
+    it('Trigger deposit phase works', async () => {
+        await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
+            token0.address,
+            token1.address,
+            (await time.latest()) + 1
+        );
+        const priceDiscoveryPoolAddress =
+            await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
+                token0.address,
+                token1.address
+            );
+        const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
+        priceDiscoveryPool = factory.attach(
+            priceDiscoveryPoolAddress
+        ) as VPriceDiscoveryPool;
+
+        let phaseBefore = await priceDiscoveryPool.currentPhase();
+        await priceDiscoveryPool.triggerDepositPhase();
+        let phaseAfter = await priceDiscoveryPool.currentPhase();
+        expect(phaseBefore).to.equal(0);
+        expect(phaseAfter).to.equal(1);
+    });
+
+    it('Trigger deposit phase fails when called from wrong phase', async () => {
+        await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
+            token0.address,
+            token1.address,
+            await time.latest()
+        );
+        const priceDiscoveryPoolAddress =
+            await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
+                token0.address,
+                token1.address
+            );
+        const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
+        priceDiscoveryPool = factory.attach(
+            priceDiscoveryPoolAddress
+        ) as VPriceDiscoveryPool;
+
+        await priceDiscoveryPool.triggerDepositPhase();
+        await expect(priceDiscoveryPool.triggerDepositPhase()).to.revertedWith(
+            'Wrong phase'
+        );
+    });
+
+    it('Trigger deposit phase fails when called too early', async () => {
+        await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
+            token0.address,
+            token1.address,
+            (await time.latest()) + 3
+        );
+        const priceDiscoveryPoolAddress =
+            await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
+                token0.address,
+                token1.address
+            );
+        const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
+        priceDiscoveryPool = factory.attach(
+            priceDiscoveryPoolAddress
+        ) as VPriceDiscoveryPool;
+
+        await expect(priceDiscoveryPool.triggerDepositPhase()).to.revertedWith(
+            'Too early'
+        );
+    });
+});
+
 describe('vPriceDiscoveryPool: Phase 1', function () {
     let priceDiscoveryPoolFactory: VPriceDiscoveryPoolFactory;
     let priceDiscoveryPool: VPriceDiscoveryPool;
@@ -62,7 +147,13 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         const balanceBefore0 = await token0.balanceOf(
             priceDiscoveryPool.address
         );
+        const vrswDepositBefore = await priceDiscoveryPool.vrswDeposits(
+            deployer.address
+        );
         await priceDiscoveryPool.deposit(token0.address, amount0);
+        const vrswDepositAfter = await priceDiscoveryPool.vrswDeposits(
+            deployer.address
+        );
         const balanceAfter0 = await token0.balanceOf(
             priceDiscoveryPool.address
         );
@@ -70,26 +161,113 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         const balanceBefore1 = await token1.balanceOf(
             priceDiscoveryPool.address
         );
+        const opponentDepositBefore = await priceDiscoveryPool.opponentDeposits(
+            deployer.address
+        );
         await priceDiscoveryPool.deposit(token1.address, amount1);
+        const opponentDepositAfter = await priceDiscoveryPool.opponentDeposits(
+            deployer.address
+        );
         const balanceAfter1 = await token1.balanceOf(
             priceDiscoveryPool.address
         );
+        expect(opponentDepositAfter).to.be.above(opponentDepositBefore);
+        expect(vrswDepositAfter).to.be.above(vrswDepositBefore);
         expect(balanceBefore0).to.be.below(balanceAfter0);
         expect(balanceBefore1).to.be.below(balanceAfter1);
     });
 
-    it('Must revert if amount is zero', async () => {
+    it('Deposit reverts if amount is zero', async () => {
         let amount = ethers.utils.parseEther('0');
         await expect(
             priceDiscoveryPool.deposit(token0.address, amount)
         ).to.revertedWith('Insufficient amount');
     });
 
-    it('Must revert if wrong token', async () => {
+    it('Deposit reverts if wrong token', async () => {
         let amount = ethers.utils.parseEther('1');
         await expect(
             priceDiscoveryPool.deposit(deployer.address, amount)
         ).to.revertedWith('Invalid token');
+    });
+
+    it('Deposit VRSW reverts if time is over', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 5 * 24 * 60 * 60
+        );
+        let amount = ethers.utils.parseEther('1');
+        await expect(
+            priceDiscoveryPool.deposit(token0.address, amount)
+        ).to.revertedWith('VRSW deposits closed');
+    });
+
+    it('Deposit opponent token reverts if time is over', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
+        let amount = ethers.utils.parseEther('1');
+        await expect(
+            priceDiscoveryPool.deposit(token1.address, amount)
+        ).to.revertedWith('Deposits closed');
+    });
+
+    it('Withdraw with penalty reverts if wrong token', async () => {
+        let amount = ethers.utils.parseEther('1');
+        await expect(
+            priceDiscoveryPool.withdrawWithPenalty(deployer.address, amount)
+        ).to.revertedWith('Invalid token');
+    });
+
+    it('Withdraw with penalty reverts if time is over', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 7 * 24 * 60 * 60
+        );
+        let amount = ethers.utils.parseEther('1');
+        await expect(
+            priceDiscoveryPool.withdrawWithPenalty(token1.address, amount)
+        ).to.revertedWith('Deposits closed');
+    });
+
+    it('Withdraw with penalty reverts if amount is zero', async () => {
+        let amount = ethers.utils.parseEther('0');
+        await expect(
+            priceDiscoveryPool.withdrawWithPenalty(token1.address, amount)
+        ).to.revertedWith('Insufficient amount');
+    });
+
+    it('Withdraw with penalty works', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 4 * 24 * 60 * 60
+        );
+        let amount = ethers.utils.parseEther('2');
+        await priceDiscoveryPool.deposit(token0.address, amount);
+        await priceDiscoveryPool.deposit(token1.address, amount);
+        const penaltiesBefore = await priceDiscoveryPool.penalties();
+        const balance0Before = await token0.balanceOf(deployer.address);
+        const balance1Before = await token1.balanceOf(deployer.address);
+        const deposit0Before = await priceDiscoveryPool.vrswDeposits(
+            deployer.address
+        );
+        const deposit1Before = await priceDiscoveryPool.opponentDeposits(
+            deployer.address
+        );
+        await priceDiscoveryPool.withdrawWithPenalty(token0.address, amount);
+        await priceDiscoveryPool.withdrawWithPenalty(token1.address, amount);
+        const penaltiesAfter = await priceDiscoveryPool.penalties();
+        const balance0After = await token0.balanceOf(deployer.address);
+        const balance1After = await token1.balanceOf(deployer.address);
+        const deposit0After = await priceDiscoveryPool.vrswDeposits(
+            deployer.address
+        );
+        const deposit1After = await priceDiscoveryPool.opponentDeposits(
+            deployer.address
+        );
+        expect(penaltiesBefore).equals(0);
+        expect(penaltiesAfter).to.be.above(penaltiesBefore);
+        expect(balance0Before).to.be.below(balance0After);
+        expect(balance1Before).to.be.below(balance1After);
+        expect(deposit0Before).to.be.above(deposit0After);
+        expect(deposit1Before).to.be.above(deposit1After);
     });
 });
 
@@ -282,12 +460,13 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
     });
 
     it('Withdraw lp tokens twice', async () => {
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 8 * 7 * 24 * 60 * 60
+        );
         await priceDiscoveryPool.withdrawLpTokens(deployer.address);
-        const balanceBefore = await pair.balanceOf(deployer.address);
-        await priceDiscoveryPool.withdrawLpTokens(deployer.address);
-        const balanceAfter = await pair.balanceOf(deployer.address);
-        expect(balanceAfter).to.be.equal(balanceBefore);
-        expect(balanceAfter).to.be.above('0');
+        await expect(
+            priceDiscoveryPool.withdrawLpTokens(deployer.address)
+        ).to.revertedWith('Already withdrawn');
     });
 
     it('Withdraw all lp tokens tokens', async () => {
