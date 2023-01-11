@@ -436,10 +436,12 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     function _calculateVrsw(address _who) private view returns (uint256) {
         uint256 index = depositIndexes[_who];
         uint256 transferredWithBonusX10000;
+        uint256 lockMultiplierX10;
         for (uint256 i = 0; i < LOCKING_PERIODS_NUMBER; ++i) {
+            lockMultiplierX10 = availableLockingPeriods[i].multiplierX10;
             for (uint256 j = 0; j < DEPOSIT_PHASE_DAYS_NUMBER; ++j) {
                 transferredWithBonusX10000 +=
-                    availableLockingPeriods[i].multiplierX10 *
+                    lockMultiplierX10 *
                     tokensTransferred0[index][i][j] *
                     _calculateBonusX1000(j);
             }
