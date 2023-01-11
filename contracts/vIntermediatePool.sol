@@ -268,11 +268,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
 
     function claimLeftovers(address _to) external override {
         require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
+        require(!areLeftoversClaimed[_to], 'Already claimed');
 
-        AmountPair memory amounts = areLeftoversClaimed[_to]
-            ? AmountPair(0, 0)
-            : _calculateLeftovers(_to);
-        uint256 vrswAmount = areLeftoversClaimed[_to] ? 0 : _calculateVrsw(_to);
+        AmountPair memory amounts = _calculateLeftovers(_to);
+        uint256 vrswAmount = _calculateVrsw(_to);
 
         areLeftoversClaimed[_to] = true;
 
@@ -303,10 +302,15 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
                     1 weeks,
             'Too early'
         );
-        uint256 lpAmount = areLpTokensWithdrawn[_to][_lockingPeriodIndex]
-            ? 0
-            : _calculateLpTokens(_to, _lockingPeriodIndex);
+        require(
+            !areLpTokensWithdrawn[_to][_lockingPeriodIndex],
+            'Already withdrawn'
+        );
+
+        uint256 lpAmount = _calculateLpTokens(_to, _lockingPeriodIndex);
+
         areLpTokensWithdrawn[_to][_lockingPeriodIndex] = true;
+
         if (lpAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vsPair), _to, lpAmount);
         }

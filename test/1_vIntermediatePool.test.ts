@@ -437,11 +437,9 @@ describe('vIntermediatePool: Phase 3', function () {
 
     it('Claim leftovers twice', async () => {
         await intermediatePool.claimLeftovers(deployer.address);
-        const balanceBefore = await token1.balanceOf(deployer.address);
-        await intermediatePool.claimLeftovers(deployer.address);
-        const balanceAfter = await token1.balanceOf(deployer.address);
-        expect(balanceAfter).to.be.equal(balanceBefore);
-        expect(balanceAfter).to.be.above(0);
+        await expect(
+            intermediatePool.claimLeftovers(deployer.address)
+        ).to.revertedWith('Already claimed');
     });
 
     it('Withdraw lp tokens for myself', async () => {
@@ -474,8 +472,6 @@ describe('vIntermediatePool: Phase 3', function () {
         );
 
         await intermediatePool.withdrawLpTokens(deployer.address, 0);
-        await intermediatePool.withdrawLpTokens(deployer.address, 1);
-        await intermediatePool.withdrawLpTokens(deployer.address, 2);
         const lpTokensAfter3 = await pair.balanceOf(deployer.address);
         // all lp tokens are withdrawn
         expect(lpTokensAfter3).to.be.above(lpTokensAfter2);
@@ -492,14 +488,9 @@ describe('vIntermediatePool: Phase 3', function () {
         await intermediatePool.withdrawLpTokens(deployer.address, 1);
         await intermediatePool.withdrawLpTokens(deployer.address, 2);
         await intermediatePool.withdrawLpTokens(deployer.address, 3);
-        const balanceBefore = await pair.balanceOf(deployer.address);
-        await intermediatePool.withdrawLpTokens(deployer.address, 0);
-        await intermediatePool.withdrawLpTokens(deployer.address, 1);
-        await intermediatePool.withdrawLpTokens(deployer.address, 2);
-        await intermediatePool.withdrawLpTokens(deployer.address, 3);
-        const balanceAfter = await pair.balanceOf(deployer.address);
-        expect(balanceAfter).to.be.equal(balanceBefore);
-        expect(balanceAfter).to.be.above('0');
+        await expect(
+            intermediatePool.withdrawLpTokens(deployer.address, 0)
+        ).to.revertedWith('Already withdrawn');
     });
 
     it('Withdraw all lp tokens', async () => {
