@@ -10,7 +10,7 @@ import './interfaces/virtuswap/IvRouter.sol';
 import './interfaces/virtuswap/IvPairFactory.sol';
 
 contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
-    uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
+    uint256 public constant DEPOSIT_PHASE_DAYS_NUMBER = 7;
     uint256 public constant VRSW_DEPOSIT_DURATION = 5 days;
     uint256 public constant LP_TOKENS_LOCKING_PERIOD = 12 weeks;
     uint256 public constant OPPONENT_DEPOSIT_WEIGHT = 70;
@@ -70,7 +70,8 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function triggerTransferPhase() external override {
         require(
-            block.timestamp >= startTimestamp + DEPOSIT_PHASE_DURATION,
+            block.timestamp >=
+                startTimestamp + DEPOSIT_PHASE_DAYS_NUMBER * 1 days,
             'Too early'
         );
         require(currentPhase == Phase.DEPOSIT, 'Wrong phase');
@@ -92,7 +93,8 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         } else {
             require(_token == opponentToken, 'Invalid token');
             require(
-                block.timestamp < startTimestamp + DEPOSIT_PHASE_DURATION,
+                block.timestamp <
+                    startTimestamp + DEPOSIT_PHASE_DAYS_NUMBER * 1 days,
                 'Deposits closed'
             );
             opponentDeposits[msg.sender][currentDay] += _amount;
@@ -120,7 +122,8 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         );
         require(_amount > 0, 'Insufficient amount');
         require(
-            block.timestamp < startTimestamp + DEPOSIT_PHASE_DURATION,
+            block.timestamp <
+                startTimestamp + DEPOSIT_PHASE_DAYS_NUMBER * 1 days,
             'Deposits closed'
         );
 
@@ -244,10 +247,9 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     function _calculateRewards(
         address _who
     ) private view returns (uint256 rewardsAmount) {
-        uint256 depositPhaseDaysNumber = DEPOSIT_PHASE_DURATION / 1 days;
         uint256 vrswDepositWithBonusX1000;
         uint256 opponentDepositWithBonusX1000;
-        for (uint256 day = 0; day < depositPhaseDaysNumber; ++day) {
+        for (uint256 day = 0; day < DEPOSIT_PHASE_DAYS_NUMBER; ++day) {
             vrswDepositWithBonusX1000 +=
                 vrswDeposits[_who][day] *
                 _calculateBonusX1000(day);
@@ -271,10 +273,9 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     ) private view returns (uint256 lpTokensAmount) {
         uint256 _totalTransferred0 = totalVrswTransferred;
         uint256 _totalTransferred1 = totalOpponentTransferred;
-        uint256 depositPhaseDaysNumber = DEPOSIT_PHASE_DURATION / 1 days;
         uint256 _vrswDeposited;
         uint256 _opponentDeposited;
-        for (uint256 day = 0; day < depositPhaseDaysNumber; ++day) {
+        for (uint256 day = 0; day < DEPOSIT_PHASE_DAYS_NUMBER; ++day) {
             _vrswDeposited += vrswDeposits[_who][day];
             _opponentDeposited += opponentDeposits[_who][day];
         }
@@ -311,9 +312,12 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         if (_currentDay < 6) {
             numerator = 0;
             denominator = 1;
-        } else {
+        } else if (_currentDay < DEPOSIT_PHASE_DAYS_NUMBER) {
             numerator = block.timestamp - startTimestamp - 6 days;
             denominator = 1 days;
+        } else {
+            numerator = 1;
+            denominator = 1;
         }
         return (numerator * _amount) / denominator;
     }
