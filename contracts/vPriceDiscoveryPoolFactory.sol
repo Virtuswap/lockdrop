@@ -34,7 +34,8 @@ contract vPriceDiscoveryPoolFactory is IvPriceDiscoveryPoolFactory {
     function createPriceDiscoveryPool(
         address _token0,
         address _token1,
-        uint256 _startTimestamp
+        uint256 _startTimestamp,
+        uint256 _totalVrswAllocated
     ) external override returns (address pool) {
         require(_token0 != _token1, 'Identical addresses');
         require(_token0 != address(0), 'Zero address');
@@ -49,7 +50,8 @@ contract vPriceDiscoveryPoolFactory is IvPriceDiscoveryPoolFactory {
                 _token0,
                 _token1,
                 vsRouter,
-                _startTimestamp
+                _startTimestamp,
+                _totalVrswAllocated
             )
         );
 

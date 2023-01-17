@@ -13,19 +13,25 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     uint256 public constant DEPOSIT_PHASE_DURATION = 7 days;
     uint256 public constant VRSW_DEPOSIT_DURATION = 5 days;
     uint256 public constant LP_TOKENS_LOCKING_PERIOD = 12 weeks;
+    uint256 public constant OPPONENT_DEPOSIT_WEIGHT = 70;
+    uint256 public constant VRSW_DEPOSIT_WEIGHT = 100 - OPPONENT_DEPOSIT_WEIGHT;
 
     Phase public currentPhase;
 
     uint256 public totalVrswTransferred;
     uint256 public totalOpponentTransferred;
+    uint256 public totalVrswDepositWithBonusX1000;
+    uint256 public totalOpponentDepositWithBonusX1000;
     uint256 public totalLpTokens;
     uint256 public penalties;
     mapping(address => uint256) public lpTokensWithdrawn;
-    mapping(address => uint256) public vrswDeposits;
-    mapping(address => uint256) public opponentDeposits;
+    mapping(address => bool) public rewardsWithdrawn;
+    mapping(address => mapping(uint256 => uint256)) public vrswDeposits;
+    mapping(address => mapping(uint256 => uint256)) public opponentDeposits;
 
     uint256 public immutable startTimestamp;
     address public immutable vrswToken;
+    uint256 public immutable totalVrswAllocated;
     address public immutable opponentToken;
     address public immutable factory;
     address public immutable vsRouter;
@@ -36,10 +42,12 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         address _vrswToken,
         address _opponentToken,
         address _vsRouter,
-        uint256 _startTimestamp
+        uint256 _startTimestamp,
+        uint256 _totalVrswAllocated
     ) {
         factory = _factory;
         vrswToken = _vrswToken;
+        totalVrswAllocated = _totalVrswAllocated;
         opponentToken = _opponentToken;
         startTimestamp = _startTimestamp;
         currentPhase = Phase.CLOSED;
@@ -71,19 +79,26 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function deposit(address _token, uint256 _amount) external override {
         require(_amount > 0, 'Insufficient amount');
+        uint256 currentDay = (block.timestamp - startTimestamp) / 1 days;
         if (_token == vrswToken) {
             require(
                 block.timestamp < startTimestamp + VRSW_DEPOSIT_DURATION,
                 'VRSW deposits closed'
             );
-            vrswDeposits[msg.sender] += _amount;
+            vrswDeposits[msg.sender][currentDay] += _amount;
+            totalVrswDepositWithBonusX1000 +=
+                _amount *
+                _calculateBonusX1000(currentDay);
         } else {
             require(_token == opponentToken, 'Invalid token');
             require(
                 block.timestamp < startTimestamp + DEPOSIT_PHASE_DURATION,
                 'Deposits closed'
             );
-            opponentDeposits[msg.sender] += _amount;
+            opponentDeposits[msg.sender][currentDay] += _amount;
+            totalOpponentDepositWithBonusX1000 +=
+                _amount *
+                _calculateBonusX1000(currentDay);
         }
 
         SafeERC20.safeTransferFrom(
@@ -96,7 +111,8 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function withdrawWithPenalty(
         address _token,
-        uint256 _amount
+        uint256 _amount,
+        uint256 _depositDay
     ) external override {
         require(
             _token == vrswToken || _token == opponentToken,
@@ -112,8 +128,8 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         uint256 amountOut = _amount - penalty;
 
         _token == vrswToken
-            ? vrswDeposits[msg.sender] -= _amount
-            : opponentDeposits[msg.sender] -= _amount;
+            ? vrswDeposits[msg.sender][_depositDay] -= _amount
+            : opponentDeposits[msg.sender][_depositDay] -= _amount;
         penalties += penalty;
 
         if (amountOut > 0) {
@@ -168,6 +184,23 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         return _calculateLpTokens(_who) - lpTokensWithdrawn[_who];
     }
 
+    function viewRewards(
+        address _who
+    ) external view override returns (uint256) {
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
+        return rewardsWithdrawn[_who] ? 0 : _calculateRewards(_who);
+    }
+
+    function claimRewards(address _who) external override {
+        require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
+        uint256 rewardsAmount = rewardsWithdrawn[_who]
+            ? 0
+            : _calculateRewards(_who);
+        if (rewardsAmount > 0) {
+            SafeERC20.safeTransfer(IERC20(vrswToken), _who, rewardsAmount);
+        }
+    }
+
     function emergencyStop() external override {
         require(
             msg.sender == IvPriceDiscoveryPoolFactory(factory).admin(),
@@ -208,17 +241,54 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         );
     }
 
+    function _calculateRewards(
+        address _who
+    ) private view returns (uint256 rewardsAmount) {
+        uint256 depositPhaseDaysNumber = DEPOSIT_PHASE_DURATION / 1 days;
+        uint256 vrswDepositWithBonusX1000;
+        uint256 opponentDepositWithBonusX1000;
+        for (uint256 day = 0; day < depositPhaseDaysNumber; ++day) {
+            vrswDepositWithBonusX1000 +=
+                vrswDeposits[_who][day] *
+                _calculateBonusX1000(day);
+            opponentDepositWithBonusX1000 +=
+                opponentDeposits[_who][day] *
+                _calculateBonusX1000(day);
+        }
+        return
+            ((VRSW_DEPOSIT_WEIGHT *
+                vrswDepositWithBonusX1000 *
+                totalOpponentDepositWithBonusX1000 +
+                OPPONENT_DEPOSIT_WEIGHT *
+                opponentDepositWithBonusX1000 *
+                totalVrswDepositWithBonusX1000) * totalVrswAllocated) /
+            (totalOpponentDepositWithBonusX1000 *
+                totalVrswDepositWithBonusX1000);
+    }
+
     function _calculateLpTokens(
         address _who
     ) private view returns (uint256 lpTokensAmount) {
         uint256 _totalTransferred0 = totalVrswTransferred;
         uint256 _totalTransferred1 = totalOpponentTransferred;
+        uint256 depositPhaseDaysNumber = DEPOSIT_PHASE_DURATION / 1 days;
+        uint256 _vrswDeposited;
+        uint256 _opponentDeposited;
+        for (uint256 day = 0; day < depositPhaseDaysNumber; ++day) {
+            _vrswDeposited += vrswDeposits[_who][day];
+            _opponentDeposited += opponentDeposits[_who][day];
+        }
         lpTokensAmount =
-            ((vrswDeposits[_who] *
+            ((_vrswDeposited *
                 _totalTransferred1 +
-                opponentDeposits[_who] *
+                _opponentDeposited *
                 _totalTransferred0) * totalLpTokens) /
             (2 * _totalTransferred0 * _totalTransferred1);
+    }
+
+    function _calculateBonusX1000(uint256 _day) private view returns (uint256) {
+        // starting from 11.2% bonus will decrease by 2.5% every day
+        return 1112 - _day * 2;
     }
 
     function _calculatePenalty(

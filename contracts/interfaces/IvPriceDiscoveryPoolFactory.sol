@@ -13,7 +13,8 @@ interface IvPriceDiscoveryPoolFactory {
     function createPriceDiscoveryPool(
         address _token0,
         address _token1,
-        uint256 _startTimestamp
+        uint256 _startTimestamp,
+        uint256 _totalVrswAllocated
     ) external returns (address pool);
 
     function changeAdmin(address _newAdmin) external;
