@@ -18,6 +18,7 @@ describe('vPriceDiscoveryPool: Prerequisites', function () {
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
     let token1: Token1;
+    const totalVrswAllocated = '1000000000000000000000';
 
     beforeEach(async () => {
         await deployments.fixture(['all']);
@@ -34,7 +35,8 @@ describe('vPriceDiscoveryPool: Prerequisites', function () {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            (await time.latest()) + 1
+            (await time.latest()) + 1,
+            totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
@@ -57,7 +59,8 @@ describe('vPriceDiscoveryPool: Prerequisites', function () {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest()
+            await time.latest(),
+            totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
@@ -79,7 +82,8 @@ describe('vPriceDiscoveryPool: Prerequisites', function () {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            (await time.latest()) + 3
+            (await time.latest()) + 3,
+            totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
@@ -104,6 +108,7 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
     let token0: Token0;
     let token1: Token1;
     let deployer: SignerWithAddress;
+    const totalVrswAllocated = '1000000000000000000000';
 
     beforeEach(async () => {
         const accounts = await ethers.getSigners();
@@ -120,7 +125,8 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest()
+            await time.latest(),
+            totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
@@ -148,11 +154,13 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
             priceDiscoveryPool.address
         );
         const vrswDepositBefore = await priceDiscoveryPool.vrswDeposits(
-            deployer.address
+            deployer.address,
+            0
         );
         await priceDiscoveryPool.deposit(token0.address, amount0);
         const vrswDepositAfter = await priceDiscoveryPool.vrswDeposits(
-            deployer.address
+            deployer.address,
+            0
         );
         const balanceAfter0 = await token0.balanceOf(
             priceDiscoveryPool.address
@@ -162,11 +170,13 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
             priceDiscoveryPool.address
         );
         const opponentDepositBefore = await priceDiscoveryPool.opponentDeposits(
-            deployer.address
+            deployer.address,
+            0
         );
         await priceDiscoveryPool.deposit(token1.address, amount1);
         const opponentDepositAfter = await priceDiscoveryPool.opponentDeposits(
-            deployer.address
+            deployer.address,
+            0
         );
         const balanceAfter1 = await token1.balanceOf(
             priceDiscoveryPool.address
@@ -214,7 +224,7 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
     it('Withdraw with penalty reverts if wrong token', async () => {
         let amount = ethers.utils.parseEther('1');
         await expect(
-            priceDiscoveryPool.withdrawWithPenalty(deployer.address, amount)
+            priceDiscoveryPool.withdrawWithPenalty(deployer.address, amount, 0)
         ).to.revertedWith('Invalid token');
     });
 
@@ -224,14 +234,14 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         );
         let amount = ethers.utils.parseEther('1');
         await expect(
-            priceDiscoveryPool.withdrawWithPenalty(token1.address, amount)
+            priceDiscoveryPool.withdrawWithPenalty(token1.address, amount, 0)
         ).to.revertedWith('Deposits closed');
     });
 
     it('Withdraw with penalty reverts if amount is zero', async () => {
         let amount = ethers.utils.parseEther('0');
         await expect(
-            priceDiscoveryPool.withdrawWithPenalty(token1.address, amount)
+            priceDiscoveryPool.withdrawWithPenalty(token1.address, amount, 0)
         ).to.revertedWith('Insufficient amount');
     });
 
@@ -246,21 +256,25 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         const balance0Before = await token0.balanceOf(deployer.address);
         const balance1Before = await token1.balanceOf(deployer.address);
         const deposit0Before = await priceDiscoveryPool.vrswDeposits(
-            deployer.address
+            deployer.address,
+            4
         );
         const deposit1Before = await priceDiscoveryPool.opponentDeposits(
-            deployer.address
+            deployer.address,
+            4
         );
-        await priceDiscoveryPool.withdrawWithPenalty(token0.address, amount);
-        await priceDiscoveryPool.withdrawWithPenalty(token1.address, amount);
+        await priceDiscoveryPool.withdrawWithPenalty(token0.address, amount, 4);
+        await priceDiscoveryPool.withdrawWithPenalty(token1.address, amount, 4);
         const penaltiesAfter = await priceDiscoveryPool.penalties();
         const balance0After = await token0.balanceOf(deployer.address);
         const balance1After = await token1.balanceOf(deployer.address);
         const deposit0After = await priceDiscoveryPool.vrswDeposits(
-            deployer.address
+            deployer.address,
+            4
         );
         const deposit1After = await priceDiscoveryPool.opponentDeposits(
-            deployer.address
+            deployer.address,
+            4
         );
         expect(penaltiesBefore).equals(0);
         expect(penaltiesAfter).to.be.above(penaltiesBefore);
@@ -278,6 +292,7 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
     let token0: Token0;
     let token1: Token1;
     let accounts;
+    const totalVrswAllocated = '1000000000000000000000';
 
     beforeEach(async () => {
         accounts = await ethers.getSigners();
@@ -292,7 +307,8 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest()
+            await time.latest(),
+            totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
@@ -370,6 +386,7 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
     let deployer: SignerWithAddress;
     let accounts: SignerWithAddress[];
     let pair: MockVPair;
+    const totalVrswAllocated = '1000000000000000000000';
 
     beforeEach(async () => {
         accounts = await ethers.getSigners();
@@ -385,7 +402,8 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest()
+            await time.latest(),
+            totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
@@ -492,6 +510,7 @@ describe('vPriceDiscoveryPool: emergency', function () {
     let vrswToken: MockVrswToken;
     let accounts: SignerWithAddress[];
     let pair: MockVPair;
+    const totalVrswAllocated = '1000000000000000000000';
 
     before(async () => {
         accounts = await ethers.getSigners();
@@ -507,7 +526,8 @@ describe('vPriceDiscoveryPool: emergency', function () {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
             token1.address,
-            await time.latest()
+            await time.latest(),
+            totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
