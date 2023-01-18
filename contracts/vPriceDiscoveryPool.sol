@@ -202,9 +202,9 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function claimRewards(address _who) external override {
         require(currentPhase == Phase.WITHDRAW, 'Wrong phase');
-        uint256 rewardsAmount = rewardsWithdrawn[_who]
-            ? 0
-            : _calculateRewards(_who);
+        require(!rewardsWithdrawn[_who], 'Already withdrawn');
+        uint256 rewardsAmount = _calculateRewards(_who);
+        rewardsWithdrawn[_who] = true;
         if (rewardsAmount > 0) {
             SafeERC20.safeTransfer(IERC20(vrswToken), _who, rewardsAmount);
         }
@@ -270,7 +270,8 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
                 OPPONENT_DEPOSIT_WEIGHT *
                 opponentDepositWithBonusX1000 *
                 totalVrswDepositWithBonusX1000) * totalVrswAllocated) /
-            (totalOpponentDepositWithBonusX1000 *
+            (100 *
+                totalOpponentDepositWithBonusX1000 *
                 totalVrswDepositWithBonusX1000);
     }
 
