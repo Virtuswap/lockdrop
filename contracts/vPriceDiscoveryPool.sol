@@ -23,7 +23,8 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
     uint256 public totalVrswDepositWithBonusX1000;
     uint256 public totalOpponentDepositWithBonusX1000;
     uint256 public totalLpTokens;
-    uint256 public penalties;
+    uint256 public vrswPenalties;
+    uint256 public opponentPenalties;
     mapping(address => uint256) public lpTokensWithdrawn;
     mapping(address => bool) public rewardsWithdrawn;
     mapping(address => mapping(uint256 => uint256)) public vrswDeposits;
@@ -90,6 +91,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
             totalVrswDepositWithBonusX1000 +=
                 _amount *
                 _calculateBonusX1000(currentDay);
+            totalVrswTransferred += _amount;
         } else {
             require(_token == opponentToken, 'Invalid token');
             require(
@@ -101,6 +103,7 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
             totalOpponentDepositWithBonusX1000 +=
                 _amount *
                 _calculateBonusX1000(currentDay);
+            totalOpponentTransferred += _amount;
         }
 
         SafeERC20.safeTransferFrom(
@@ -130,10 +133,15 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
         uint256 penalty = _calculatePenalty(_token, _amount);
         uint256 amountOut = _amount - penalty;
 
-        _token == vrswToken
-            ? vrswDeposits[msg.sender][_depositDay] -= _amount
-            : opponentDeposits[msg.sender][_depositDay] -= _amount;
-        penalties += penalty;
+        if (_token == vrswToken) {
+            vrswDeposits[msg.sender][_depositDay] -= _amount;
+            vrswPenalties += penalty;
+            totalVrswTransferred -= _amount;
+        } else {
+            opponentDeposits[msg.sender][_depositDay] -= _amount;
+            opponentPenalties += penalty;
+            totalOpponentTransferred -= _amount;
+        }
 
         if (amountOut > 0) {
             SafeERC20.safeTransfer(IERC20(_token), msg.sender, amountOut);
@@ -142,20 +150,18 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
 
     function transferToRealPool() external override {
         require(currentPhase == Phase.TRANSFER, 'Wrong phase');
-
-        totalVrswTransferred = IERC20(vrswToken).balanceOf(address(this));
-        totalOpponentTransferred = IERC20(opponentToken).balanceOf(
-            address(this)
-        );
-        IERC20(vrswToken).approve(vsRouter, totalVrswTransferred);
-        IERC20(opponentToken).approve(vsRouter, totalOpponentTransferred);
+        uint256 vrswToTransfer = totalVrswTransferred + vrswPenalties;
+        uint256 opponentToTransfer = totalOpponentTransferred +
+            opponentPenalties;
+        IERC20(vrswToken).approve(vsRouter, vrswToTransfer);
+        IERC20(opponentToken).approve(vsRouter, opponentToTransfer);
         IvRouter(vsRouter).addLiquidity(
             vrswToken,
             opponentToken,
-            totalVrswTransferred,
-            totalOpponentTransferred,
-            totalVrswTransferred,
-            totalOpponentTransferred,
+            vrswToTransfer,
+            opponentToTransfer,
+            vrswToTransfer,
+            opponentToTransfer,
             address(this),
             block.timestamp + 1 minutes
         );
@@ -287,8 +293,8 @@ contract vPriceDiscoveryPool is IvPriceDiscoveryPool {
             (2 * _totalTransferred0 * _totalTransferred1);
     }
 
-    function _calculateBonusX1000(uint256 _day) private view returns (uint256) {
-        // starting from 11.2% bonus will decrease by 2.5% every day
+    function _calculateBonusX1000(uint256 _day) private pure returns (uint256) {
+        // starting from 11.2% bonus will decrease by 2% every day
         return 1112 - _day * 2;
     }
 

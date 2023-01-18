@@ -252,7 +252,9 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         let amount = ethers.utils.parseEther('2');
         await priceDiscoveryPool.deposit(token0.address, amount);
         await priceDiscoveryPool.deposit(token1.address, amount);
-        const penaltiesBefore = await priceDiscoveryPool.penalties();
+        const vrswPenaltiesBefore = await priceDiscoveryPool.vrswPenalties();
+        const opponentPenaltiesBefore =
+            await priceDiscoveryPool.opponentPenalties();
         const balance0Before = await token0.balanceOf(deployer.address);
         const balance1Before = await token1.balanceOf(deployer.address);
         const deposit0Before = await priceDiscoveryPool.vrswDeposits(
@@ -263,9 +265,14 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
             deployer.address,
             4
         );
-        await priceDiscoveryPool.withdrawWithPenalty(token0.address, amount, 4);
         await priceDiscoveryPool.withdrawWithPenalty(token1.address, amount, 4);
-        const penaltiesAfter = await priceDiscoveryPool.penalties();
+        await time.setNextBlockTimestamp(
+            (await time.latest()) + 2 * 24 * 60 * 60
+        );
+        await priceDiscoveryPool.withdrawWithPenalty(token0.address, amount, 4);
+        const vrswPenaltiesAfter = await priceDiscoveryPool.vrswPenalties();
+        const opponentPenaltiesAfter =
+            await priceDiscoveryPool.opponentPenalties();
         const balance0After = await token0.balanceOf(deployer.address);
         const balance1After = await token1.balanceOf(deployer.address);
         const deposit0After = await priceDiscoveryPool.vrswDeposits(
@@ -276,8 +283,10 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
             deployer.address,
             4
         );
-        expect(penaltiesBefore).equals(0);
-        expect(penaltiesAfter).to.be.above(penaltiesBefore);
+        expect(vrswPenaltiesBefore).equals(0);
+        expect(opponentPenaltiesBefore).equals(0);
+        expect(vrswPenaltiesAfter).to.be.above(vrswPenaltiesBefore);
+        expect(opponentPenaltiesAfter).to.be.above(opponentPenaltiesBefore);
         expect(balance0Before).to.be.below(balance0After);
         expect(balance1Before).to.be.below(balance1After);
         expect(deposit0Before).to.be.above(deposit0After);
