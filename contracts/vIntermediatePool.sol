@@ -12,8 +12,8 @@ import './vPriceOracle.sol';
 
 contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
     struct LockingPeriod {
-        uint128 durationWeeks;
-        uint128 multiplierX10;
+        uint32 durationWeeks;
+        uint32 multiplierX10;
     }
 
     uint256 public constant LOCKING_PERIODS_NUMBER = 4;
@@ -173,8 +173,6 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             'Invalid locking period'
         );
         uint256 _currentDay = (block.timestamp - startTimestamp) / 1 days;
-        require(_depositDay <= _currentDay, 'Invalid deposit day');
-
         uint256 index = depositIndexes[msg.sender];
         AmountPair memory _deposit = deposits[index][_lockingPeriodIndex][
             _depositDay
@@ -213,7 +211,10 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
             'Invalid transfers number'
         );
 
-        uint256 lowerBound = totalDeposits - _transfersNumber;
+        uint256 lowerBound;
+        unchecked {
+            lowerBound = totalDeposits - _transfersNumber;
+        }
         uint256 _totalTransferredWithBonusX10000;
         AmountPair memory optimalAmounts;
         AmountPair memory amounts;
@@ -472,9 +473,12 @@ contract vIntermediatePool is vPriceOracle, IvIntermediatePool {
         } else if (_currentDay < 6) {
             numerator = block.timestamp - startTimestamp - 4 days;
             denominator = 4 days;
-        } else {
+        } else if (_currentDay < DEPOSIT_PHASE_DAYS_NUMBER) {
             numerator = block.timestamp - startTimestamp - 5 days;
             denominator = 2 days;
+        } else {
+            numerator = 1;
+            denominator = 1;
         }
         return
             AmountPair(

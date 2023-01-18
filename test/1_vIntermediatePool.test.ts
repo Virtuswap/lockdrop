@@ -370,7 +370,7 @@ describe('vIntermediatePool: Phase 1', function () {
     it('Withdraw with penalty reverts if deposit day is wrong', async () => {
         await expect(
             intermediatePool.withdrawWithPenalty(3, 7)
-        ).to.revertedWith('Invalid deposit day');
+        ).to.revertedWith('No deposit');
     });
 
     it('Withdraw with penalty reverts if deposit is zero', async () => {
