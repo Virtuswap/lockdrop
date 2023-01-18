@@ -20,7 +20,7 @@ const deployCore: DeployFunction = async function (
     await deploy('priceDiscoveryPoolFactory', {
         from: deployer,
         contract: 'vPriceDiscoveryPoolFactory',
-        args: [vsRouter.address],
+        args: [vsRouter.address, vrswToken.address],
         log: true,
     });
 };

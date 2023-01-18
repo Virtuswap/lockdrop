@@ -6,13 +6,11 @@ interface IvPriceDiscoveryPoolFactory {
     function admin() external view returns (address);
 
     function getPriceDiscoveryPool(
-        address _token0,
-        address _token1
+        address _opponentToken
     ) external view returns (address);
 
     function createPriceDiscoveryPool(
-        address _token0,
-        address _token1,
+        address _opponentToken,
         uint256 _startTimestamp,
         uint256 _totalVrswAllocated
     ) external returns (address pool);

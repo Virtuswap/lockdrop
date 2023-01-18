@@ -8,7 +8,6 @@ import {
     MockVPair,
     MockVrswToken,
     Token0,
-    Token1,
 } from '../typechain-types';
 import { time } from '@nomicfoundation/hardhat-network-helpers';
 
@@ -16,8 +15,8 @@ describe('vPriceDiscoveryPool: Prerequisites', function () {
     let priceDiscoveryPoolFactory: VPriceDiscoveryPoolFactory;
     let priceDiscoveryPool: VPriceDiscoveryPool;
     let mockVPairFactory: MockVPairFactory;
+    let vrswToken: MockVrswToken;
     let token0: Token0;
-    let token1: Token1;
     const totalVrswAllocated = '1000000000000000000000';
 
     beforeEach(async () => {
@@ -27,21 +26,19 @@ describe('vPriceDiscoveryPool: Prerequisites', function () {
         );
         mockVPairFactory = await ethers.getContract('MockVPairFactory');
         token0 = await ethers.getContract('Token0');
-        token1 = await ethers.getContract('Token1');
-        await mockVPairFactory.createPair(token0.address, token1.address);
+        vrswToken = await ethers.getContract('MockVrswToken');
+        await mockVPairFactory.createPair(vrswToken.address, token0.address);
     });
 
     it('Trigger deposit phase works', async () => {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
-            token1.address,
             (await time.latest()) + 1,
             totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
-                token0.address,
-                token1.address
+                token0.address
             );
         const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
         priceDiscoveryPool = factory.attach(
@@ -58,14 +55,12 @@ describe('vPriceDiscoveryPool: Prerequisites', function () {
     it('Trigger deposit phase fails when called from wrong phase', async () => {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
-            token1.address,
             await time.latest(),
             totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
-                token0.address,
-                token1.address
+                token0.address
             );
         const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
         priceDiscoveryPool = factory.attach(
@@ -81,14 +76,12 @@ describe('vPriceDiscoveryPool: Prerequisites', function () {
     it('Trigger deposit phase fails when called too early', async () => {
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
-            token1.address,
             (await time.latest()) + 3,
             totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
-                token0.address,
-                token1.address
+                token0.address
             );
         const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
         priceDiscoveryPool = factory.attach(
@@ -106,7 +99,7 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
     let priceDiscoveryPool: VPriceDiscoveryPool;
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
-    let token1: Token1;
+    let vrswToken: MockVrswToken;
     let deployer: SignerWithAddress;
     const totalVrswAllocated = '1000000000000000000000';
 
@@ -119,19 +112,17 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         );
         mockVPairFactory = await ethers.getContract('MockVPairFactory');
         token0 = await ethers.getContract('Token0');
-        token1 = await ethers.getContract('Token1');
-        await mockVPairFactory.createPair(token0.address, token1.address);
+        vrswToken = await ethers.getContract('MockVrswToken');
+        await mockVPairFactory.createPair(vrswToken.address, token0.address);
 
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
-            token1.address,
             await time.latest(),
             totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
-                token0.address,
-                token1.address
+                token0.address
             );
         const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
         priceDiscoveryPool = factory.attach(
@@ -142,7 +133,7 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
             priceDiscoveryPool.address,
             ethers.utils.parseEther('1000')
         );
-        await token1.approve(
+        await vrswToken.approve(
             priceDiscoveryPool.address,
             ethers.utils.parseEther('1000')
         );
@@ -150,35 +141,35 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
 
     it('Deposit works', async () => {
         const amount0 = ethers.utils.parseEther('1');
-        const balanceBefore0 = await token0.balanceOf(
+        const balanceBefore0 = await vrswToken.balanceOf(
             priceDiscoveryPool.address
         );
         const vrswDepositBefore = await priceDiscoveryPool.vrswDeposits(
             deployer.address,
             0
         );
-        await priceDiscoveryPool.deposit(token0.address, amount0);
+        await priceDiscoveryPool.deposit(vrswToken.address, amount0);
         const vrswDepositAfter = await priceDiscoveryPool.vrswDeposits(
             deployer.address,
             0
         );
-        const balanceAfter0 = await token0.balanceOf(
+        const balanceAfter0 = await vrswToken.balanceOf(
             priceDiscoveryPool.address
         );
         const amount1 = ethers.utils.parseEther('5');
-        const balanceBefore1 = await token1.balanceOf(
+        const balanceBefore1 = await token0.balanceOf(
             priceDiscoveryPool.address
         );
         const opponentDepositBefore = await priceDiscoveryPool.opponentDeposits(
             deployer.address,
             0
         );
-        await priceDiscoveryPool.deposit(token1.address, amount1);
+        await priceDiscoveryPool.deposit(token0.address, amount1);
         const opponentDepositAfter = await priceDiscoveryPool.opponentDeposits(
             deployer.address,
             0
         );
-        const balanceAfter1 = await token1.balanceOf(
+        const balanceAfter1 = await token0.balanceOf(
             priceDiscoveryPool.address
         );
         expect(opponentDepositAfter).to.be.above(opponentDepositBefore);
@@ -207,7 +198,7 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         );
         let amount = ethers.utils.parseEther('1');
         await expect(
-            priceDiscoveryPool.deposit(token0.address, amount)
+            priceDiscoveryPool.deposit(vrswToken.address, amount)
         ).to.revertedWith('VRSW deposits closed');
     });
 
@@ -217,7 +208,7 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         );
         let amount = ethers.utils.parseEther('1');
         await expect(
-            priceDiscoveryPool.deposit(token1.address, amount)
+            priceDiscoveryPool.deposit(token0.address, amount)
         ).to.revertedWith('Deposits closed');
     });
 
@@ -234,14 +225,14 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         );
         let amount = ethers.utils.parseEther('1');
         await expect(
-            priceDiscoveryPool.withdrawWithPenalty(token1.address, amount, 0)
+            priceDiscoveryPool.withdrawWithPenalty(vrswToken.address, amount, 0)
         ).to.revertedWith('Deposits closed');
     });
 
     it('Withdraw with penalty reverts if amount is zero', async () => {
         let amount = ethers.utils.parseEther('0');
         await expect(
-            priceDiscoveryPool.withdrawWithPenalty(token1.address, amount, 0)
+            priceDiscoveryPool.withdrawWithPenalty(vrswToken.address, amount, 0)
         ).to.revertedWith('Insufficient amount');
     });
 
@@ -251,12 +242,12 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
         );
         let amount = ethers.utils.parseEther('2');
         await priceDiscoveryPool.deposit(token0.address, amount);
-        await priceDiscoveryPool.deposit(token1.address, amount);
+        await priceDiscoveryPool.deposit(vrswToken.address, amount);
         const vrswPenaltiesBefore = await priceDiscoveryPool.vrswPenalties();
         const opponentPenaltiesBefore =
             await priceDiscoveryPool.opponentPenalties();
-        const balance0Before = await token0.balanceOf(deployer.address);
-        const balance1Before = await token1.balanceOf(deployer.address);
+        const balance0Before = await vrswToken.balanceOf(deployer.address);
+        const balance1Before = await token0.balanceOf(deployer.address);
         const deposit0Before = await priceDiscoveryPool.vrswDeposits(
             deployer.address,
             4
@@ -265,16 +256,20 @@ describe('vPriceDiscoveryPool: Phase 1', function () {
             deployer.address,
             4
         );
-        await priceDiscoveryPool.withdrawWithPenalty(token1.address, amount, 4);
+        await priceDiscoveryPool.withdrawWithPenalty(token0.address, amount, 4);
         await time.setNextBlockTimestamp(
             (await time.latest()) + 2 * 24 * 60 * 60
         );
-        await priceDiscoveryPool.withdrawWithPenalty(token0.address, amount, 4);
+        await priceDiscoveryPool.withdrawWithPenalty(
+            vrswToken.address,
+            amount,
+            4
+        );
         const vrswPenaltiesAfter = await priceDiscoveryPool.vrswPenalties();
         const opponentPenaltiesAfter =
             await priceDiscoveryPool.opponentPenalties();
-        const balance0After = await token0.balanceOf(deployer.address);
-        const balance1After = await token1.balanceOf(deployer.address);
+        const balance0After = await vrswToken.balanceOf(deployer.address);
+        const balance1After = await token0.balanceOf(deployer.address);
         const deposit0After = await priceDiscoveryPool.vrswDeposits(
             deployer.address,
             4
@@ -299,7 +294,7 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
     let priceDiscoveryPool: VPriceDiscoveryPool;
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
-    let token1: Token1;
+    let vrswToken: MockVrswToken;
     let accounts;
     const totalVrswAllocated = '1000000000000000000000';
 
@@ -311,18 +306,16 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
         );
         mockVPairFactory = await ethers.getContract('MockVPairFactory');
         token0 = await ethers.getContract('Token0');
-        token1 = await ethers.getContract('Token1');
-        await mockVPairFactory.createPair(token0.address, token1.address);
+        vrswToken = await ethers.getContract('MockVrswToken');
+        await mockVPairFactory.createPair(token0.address, vrswToken.address);
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
-            token1.address,
             await time.latest(),
             totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
-                token0.address,
-                token1.address
+                token0.address
             );
         const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
         priceDiscoveryPool = factory.attach(
@@ -334,7 +327,7 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
             priceDiscoveryPool.address,
             ethers.utils.parseEther('1000')
         );
-        await token1.approve(
+        await vrswToken.approve(
             priceDiscoveryPool.address,
             ethers.utils.parseEther('1000')
         );
@@ -344,14 +337,17 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
         let amount1 = ethers.utils.parseEther('10');
         for (const account of accounts) {
             await token0.mint(account.address, ethers.utils.parseEther('1000'));
-            await token1.mint(account.address, ethers.utils.parseEther('1000'));
+            await vrswToken.mint(
+                account.address,
+                ethers.utils.parseEther('1000')
+            );
             await token0
                 .connect(account)
                 .approve(
                     priceDiscoveryPool.address,
                     ethers.utils.parseEther('1000')
                 );
-            await token1
+            await vrswToken
                 .connect(account)
                 .approve(
                     priceDiscoveryPool.address,
@@ -364,7 +360,7 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
                 .deposit(token0.address, amount0);
             await priceDiscoveryPool
                 .connect(account)
-                .deposit(token1.address, amount1);
+                .deposit(vrswToken.address, amount1);
         }
         await time.setNextBlockTimestamp(
             (await time.latest()) + 7 * 24 * 60 * 60
@@ -374,11 +370,15 @@ describe('vPriceDiscoveryPool: Phase 2', function () {
 
     it('Transfer to real pool works', async () => {
         assert(!(await token0.balanceOf(priceDiscoveryPool.address)).isZero());
-        assert(!(await token1.balanceOf(priceDiscoveryPool.address)).isZero());
+        assert(
+            !(await vrswToken.balanceOf(priceDiscoveryPool.address)).isZero()
+        );
         await priceDiscoveryPool.transferToRealPool();
         // all tokens were transferred
         expect(await token0.balanceOf(priceDiscoveryPool.address)).to.equal(0);
-        expect(await token1.balanceOf(priceDiscoveryPool.address)).to.equal(0);
+        expect(await vrswToken.balanceOf(priceDiscoveryPool.address)).to.equal(
+            0
+        );
         // phase transition happened
         expect(await priceDiscoveryPool.currentPhase()).to.equal(3);
         // lp tokens were received
@@ -391,7 +391,7 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
     let priceDiscoveryPool: VPriceDiscoveryPool;
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
-    let token1: Token1;
+    let vrswToken: MockVrswToken;
     let deployer: SignerWithAddress;
     let accounts: SignerWithAddress[];
     let pair: MockVPair;
@@ -406,18 +406,16 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
         );
         mockVPairFactory = await ethers.getContract('MockVPairFactory');
         token0 = await ethers.getContract('Token0');
-        token1 = await ethers.getContract('Token1');
-        await mockVPairFactory.createPair(token0.address, token1.address);
+        vrswToken = await ethers.getContract('MockVrswToken');
+        await mockVPairFactory.createPair(token0.address, vrswToken.address);
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
-            token1.address,
             await time.latest(),
             totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
-                token0.address,
-                token1.address
+                token0.address
             );
         const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
         priceDiscoveryPool = factory.attach(
@@ -425,7 +423,7 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
         ) as VPriceDiscoveryPool;
 
         pair = (await ethers.getContractFactory('MockVPair')).attach(
-            await mockVPairFactory.getPair(token0.address, token1.address)
+            await mockVPairFactory.getPair(token0.address, vrswToken.address)
         ) as MockVPair;
 
         await priceDiscoveryPool.triggerDepositPhase();
@@ -433,7 +431,7 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
             priceDiscoveryPool.address,
             ethers.utils.parseEther('1000')
         );
-        await token1.approve(
+        await vrswToken.approve(
             priceDiscoveryPool.address,
             ethers.utils.parseEther('1000')
         );
@@ -444,14 +442,17 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
         // induce leftovers
         for (const account of accounts) {
             await token0.mint(account.address, ethers.utils.parseEther('1000'));
-            await token1.mint(account.address, ethers.utils.parseEther('1000'));
+            await vrswToken.mint(
+                account.address,
+                ethers.utils.parseEther('1000')
+            );
             await token0
                 .connect(account)
                 .approve(
                     priceDiscoveryPool.address,
                     ethers.utils.parseEther('1000')
                 );
-            await token1
+            await vrswToken
                 .connect(account)
                 .approve(
                     priceDiscoveryPool.address,
@@ -463,7 +464,7 @@ describe('vPriceDiscoveryPool: Phase 3', function () {
                 .deposit(token0.address, amount0);
             await priceDiscoveryPool
                 .connect(account)
-                .deposit(token1.address, amount1);
+                .deposit(vrswToken.address, amount1);
         }
 
         await time.setNextBlockTimestamp(
@@ -515,7 +516,6 @@ describe('vPriceDiscoveryPool: emergency', function () {
     let priceDiscoveryPool: VPriceDiscoveryPool;
     let mockVPairFactory: MockVPairFactory;
     let token0: Token0;
-    let token1: Token1;
     let vrswToken: MockVrswToken;
     let accounts: SignerWithAddress[];
     let pair: MockVPair;
@@ -529,19 +529,16 @@ describe('vPriceDiscoveryPool: emergency', function () {
         );
         mockVPairFactory = await ethers.getContract('MockVPairFactory');
         token0 = await ethers.getContract('Token0');
-        token1 = await ethers.getContract('Token1');
         vrswToken = await ethers.getContract('MockVrswToken');
-        await mockVPairFactory.createPair(token0.address, token1.address);
+        await mockVPairFactory.createPair(token0.address, vrswToken.address);
         await priceDiscoveryPoolFactory.createPriceDiscoveryPool(
             token0.address,
-            token1.address,
             await time.latest(),
             totalVrswAllocated
         );
         const priceDiscoveryPoolAddress =
             await priceDiscoveryPoolFactory.getPriceDiscoveryPool(
-                token0.address,
-                token1.address
+                token0.address
             );
         const factory = await ethers.getContractFactory('vPriceDiscoveryPool');
         priceDiscoveryPool = factory.attach(
@@ -549,7 +546,7 @@ describe('vPriceDiscoveryPool: emergency', function () {
         ) as VPriceDiscoveryPool;
 
         pair = (await ethers.getContractFactory('MockVPair')).attach(
-            await mockVPairFactory.getPair(token0.address, token1.address)
+            await mockVPairFactory.getPair(token0.address, vrswToken.address)
         ) as MockVPair;
 
         await priceDiscoveryPool.triggerDepositPhase();
@@ -557,7 +554,7 @@ describe('vPriceDiscoveryPool: emergency', function () {
             priceDiscoveryPool.address,
             ethers.utils.parseEther('1000')
         );
-        await token1.approve(
+        await vrswToken.approve(
             priceDiscoveryPool.address,
             ethers.utils.parseEther('1000')
         );
@@ -568,14 +565,17 @@ describe('vPriceDiscoveryPool: emergency', function () {
         // induce leftovers
         for (const account of accounts) {
             await token0.mint(account.address, ethers.utils.parseEther('1000'));
-            await token1.mint(account.address, ethers.utils.parseEther('1000'));
+            await vrswToken.mint(
+                account.address,
+                ethers.utils.parseEther('1000')
+            );
             await token0
                 .connect(account)
                 .approve(
                     priceDiscoveryPool.address,
                     ethers.utils.parseEther('1000')
                 );
-            await token1
+            await vrswToken
                 .connect(account)
                 .approve(
                     priceDiscoveryPool.address,
@@ -587,7 +587,7 @@ describe('vPriceDiscoveryPool: emergency', function () {
                 .deposit(token0.address, amount0);
             await priceDiscoveryPool
                 .connect(account)
-                .deposit(token1.address, amount1);
+                .deposit(vrswToken.address, amount1);
         }
 
         await time.setNextBlockTimestamp(
@@ -648,10 +648,12 @@ describe('vPriceDiscoveryPool: emergency', function () {
             priceDiscoveryPool.address
         );
         const token0After = await token0.balanceOf(priceDiscoveryPool.address);
-        const token1After = await token1.balanceOf(priceDiscoveryPool.address);
+        const vrswTokenAfter = await vrswToken.balanceOf(
+            priceDiscoveryPool.address
+        );
         expect(lpTokensAfter).to.be.equal('0');
         expect(vrswTokensAfter).to.be.equal('0');
         expect(token0After).to.be.equal('0');
-        expect(token1After).to.be.equal('0');
+        expect(vrswTokenAfter).to.be.equal('0');
     });
 });

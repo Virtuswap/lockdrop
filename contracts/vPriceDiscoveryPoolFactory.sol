@@ -7,56 +7,56 @@ import './interfaces/IvPriceDiscoveryPoolFactory.sol';
 import './interfaces/virtuswap/IvPairFactory.sol';
 
 contract vPriceDiscoveryPoolFactory is IvPriceDiscoveryPoolFactory {
-    mapping(address => mapping(address => address)) public priceDiscoveryPools;
+    mapping(address => address) public priceDiscoveryPools;
     address[] public allPriceDiscoveryPools;
 
     address public override admin;
 
     address public immutable vsRouter;
+    address public immutable vrswToken;
 
     modifier onlyAdmin() {
         require(msg.sender == admin, 'OA');
         _;
     }
 
-    constructor(address _vsRouter) {
+    constructor(address _vsRouter, address _vrswToken) {
         vsRouter = _vsRouter;
+        vrswToken = _vrswToken;
         admin = msg.sender;
     }
 
     function getPriceDiscoveryPool(
-        address _token0,
-        address _token1
+        address _opponentToken
     ) external view override returns (address) {
-        return priceDiscoveryPools[_token0][_token1];
+        return priceDiscoveryPools[_opponentToken];
     }
 
     function createPriceDiscoveryPool(
-        address _token0,
-        address _token1,
+        address _opponentToken,
         uint256 _startTimestamp,
         uint256 _totalVrswAllocated
     ) external override returns (address pool) {
-        require(_token0 != _token1, 'Identical addresses');
-        require(_token0 != address(0), 'Zero address');
+        require(_opponentToken != vrswToken, 'Identical addresses');
+        require(_opponentToken != address(0), 'Zero address');
         require(
-            priceDiscoveryPools[_token0][_token1] == address(0),
+            priceDiscoveryPools[_opponentToken] == address(0),
             'Pool exists'
         );
 
         pool = address(
             new vPriceDiscoveryPool(
                 address(this),
-                _token0,
-                _token1,
+                vrswToken,
+                _opponentToken,
                 vsRouter,
                 _startTimestamp,
                 _totalVrswAllocated
             )
         );
 
-        priceDiscoveryPools[_token0][_token1] = pool;
-        priceDiscoveryPools[_token1][_token0] = pool;
+        priceDiscoveryPools[_opponentToken] = pool;
+        priceDiscoveryPools[_opponentToken] = pool;
         allPriceDiscoveryPools.push(pool);
     }
 
